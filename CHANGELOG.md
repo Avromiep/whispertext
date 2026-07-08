@@ -3,6 +3,18 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.9] — 2026-07-07
+
+### Fixed
+- The sidebar logo and About page icon were a hardcoded purple box with a
+  generic mic glyph — never actually the app's real icon. Both now render
+  the real tan waveform icon.
+- About page showed the app version only after clicking Check for
+  Updates. It's now shown immediately on load.
+- Check for Updates result went from a bare badge to a clear up-to-date
+  checkmark or a "New version available" badge with a Download button
+  linking straight to the release.
+
 ## [1.0.8] — 2026-07-07
 
 ### Added
