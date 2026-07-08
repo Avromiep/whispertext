@@ -162,6 +162,15 @@ async def dictation_pause(paused: bool = True) -> dict:
     return {"paused": paused}
 
 
+@router.post("/dictation/test-mode")
+async def dictation_test_mode(enabled: bool = True) -> dict:
+    """Onboarding's mic test: the real hotkey still triggers recording, but
+    the pipeline stops after transcription (no cleanup/typing/history) and
+    reports the raw text over the WebSocket as a "test_result" event."""
+    pipeline.set_test_mode(enabled)
+    return {"test_mode": enabled}
+
+
 # ---------------------------------------------------------------------- hotkeys
 @router.post("/hotkeys/record")
 async def record_hotkey() -> dict:

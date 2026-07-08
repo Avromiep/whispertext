@@ -31,6 +31,11 @@ class DictationPipeline:
         self._busy = threading.Lock()          # one dictation at a time
         self._hands_free = False
         self._state_lock = threading.Lock()
+        # Onboarding's mic test uses the real hotkey but must never type into
+        # whatever window happens to have focus during setup — test mode
+        # stops after transcription and reports the raw text over the
+        # WebSocket instead of running cleanup/typing/history.
+        self._test_mode = False
         # Persistent loop: keeps provider HTTP connection pools warm between
         # dictations (asyncio.run would tear them down every time).
         self._loop = asyncio.new_event_loop()
@@ -55,6 +60,9 @@ class DictationPipeline:
             if not audio_service.is_recording or self._hands_free:
                 return
         self._finish_recording()
+
+    def set_test_mode(self, enabled: bool) -> None:
+        self._test_mode = enabled
 
     def toggle(self) -> None:
         """Double-tap: start or stop hands-free recording."""
@@ -96,6 +104,11 @@ class DictationPipeline:
             if not result.text:
                 bus.status("idle")
                 bus.notify("Didn't catch that — no speech detected.", "info")
+                return
+
+            if self._test_mode:
+                bus.publish("test_result", {"text": result.text, "language": result.language})
+                bus.status("idle")
                 return
 
             bus.status("cleaning")

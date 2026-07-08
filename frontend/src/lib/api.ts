@@ -50,6 +50,7 @@ export const api = {
   dictationTest: (seconds = 4) => request<{ text: string; language: string; error?: string }>(`/dictation/test?seconds=${seconds}`, { method: "POST" }),
   dictationToggle: () => request<{ recording: boolean }>("/dictation/toggle", { method: "POST" }),
   pauseHotkeys: (paused: boolean) => request<{ paused: boolean }>(`/dictation/pause?paused=${paused}`, { method: "POST" }),
+  setTestMode: (enabled: boolean) => request<{ test_mode: boolean }>(`/dictation/test-mode?enabled=${enabled}`, { method: "POST" }),
   recordHotkey: () => request<{ combo: string | null }>("/hotkeys/record", { method: "POST" }),
   history: (search = "") => request<HistoryEntry[]>(`/history?search=${encodeURIComponent(search)}`),
   favorite: (id: number, value: boolean) => request<{ ok: boolean }>(`/history/${id}/favorite?value=${value}`, { method: "POST" }),

@@ -10,9 +10,10 @@ interface KeyTestResult { connected: boolean; message: string; latency_ms?: numb
 
 /** One API-key row: secret input, save, test-connection — reused for the
  * primary and backup Groq keys since they behave identically. */
-function GroqKeyRow({ label, placeholder, providerId, validate }: {
+function GroqKeyRow({ label, placeholder, providerId, validate, onConfiguredChange }: {
   label: string; placeholder: string; providerId: string;
   validate: () => Promise<KeyTestResult>;
+  onConfiguredChange?: (configured: boolean) => void;
 }) {
   const [key, setKey] = useState("");
   const [configured, setConfigured] = useState(false);
@@ -20,13 +21,15 @@ function GroqKeyRow({ label, placeholder, providerId, validate }: {
   const [result, setResult] = useState<KeyTestResult | null>(null);
 
   useEffect(() => {
-    api.hasApiKey(providerId).then((r) => setConfigured(r.configured)).catch(() => {});
+    api.hasApiKey(providerId).then((r) => { setConfigured(r.configured); onConfiguredChange?.(r.configured); }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [providerId]);
 
   const save = async () => {
     await api.setApiKey(providerId, key);
     setKey("");
     setConfigured(true);
+    onConfiguredChange?.(true);
     setResult(null);
   };
 
@@ -61,6 +64,7 @@ export default function ModelsPage() {
   const [downloading, setDownloading] = useState<string | null>(null);
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [showBackup, setShowBackup] = useState(false);
+  const [groqConfigured, setGroqConfigured] = useState(false);
 
   const load = useCallback(() => { api.models().then(setModels).catch(() => {}); }, []);
   useEffect(() => {
@@ -106,7 +110,12 @@ export default function ModelsPage() {
           <button onClick={() => patch({ whisper: { engine: "groq" } })}
             className={cn("rounded-xl border p-3 text-left transition-all",
               engine === "groq" ? "border-accent bg-accent/10" : "border-border hover:border-accent/40")}>
-            <div className="text-sm font-medium flex items-center gap-1.5"><Cloud size={13} /> Groq Cloud</div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-sm font-medium flex items-center gap-1.5"><Cloud size={13} /> Groq Cloud</div>
+              {groqConfigured
+                ? <Badge color="green" icon={<Check size={11} />}>Key configured</Badge>
+                : <Badge color="yellow">No key</Badge>}
+            </div>
             <div className="text-[11px] text-muted mt-0.5">Free tier: 2,000 requests/day, no card</div>
           </button>
         </div>
@@ -114,7 +123,7 @@ export default function ModelsPage() {
         {engine === "groq" && (
           <div className="space-y-4 pt-3 border-t border-border">
             <GroqKeyRow label="Groq API key" placeholder="Get a free key at console.groq.com"
-              providerId="groq" validate={api.validateGroq} />
+              providerId="groq" validate={api.validateGroq} onConfiguredChange={setGroqConfigured} />
 
             {!showBackup ? (
               <button className="text-xs text-accent hover:underline" onClick={() => setShowBackup(true)}>

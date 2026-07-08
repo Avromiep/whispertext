@@ -5,6 +5,7 @@ import {
   Zap, HardDrive, ExternalLink,
 } from "lucide-react";
 import { api, bridge } from "../lib/api";
+import { useBackendEvents } from "../lib/ws";
 import { useSettings } from "../hooks/useSettings";
 import { Button, Card, SecretInput, cn } from "../components/ui";
 
@@ -86,19 +87,33 @@ export default function Onboarding() {
     }
   };
 
-  const runTest = async () => {
-    setTestState("recording");
-    try {
-      const p = api.dictationTest(4);
-      setTimeout(() => setTestState("processing"), 4100);
-      const r = await p;
-      setTestResult(r.text || "(no speech detected — try again)");
-      setTestState("done");
-    } catch (e) {
-      setTestResult(`Test failed: ${e}`);
+  const TEST_STEP = 7;
+
+  // The test step arms "test mode" so the real global hotkey drives the test —
+  // the pipeline stops after transcription instead of typing into whatever
+  // window happens to have focus during setup. Disarmed the moment this step
+  // isn't showing, so the hotkey behaves normally everywhere else.
+  useEffect(() => {
+    if (step !== TEST_STEP) return;
+    api.setTestMode(true).catch(() => {});
+    return () => { api.setTestMode(false).catch(() => {}); };
+  }, [step]);
+
+  useBackendEvents((e) => {
+    if (step !== TEST_STEP) return;
+    if (e.type === "status") {
+      if (e.state === "listening") { setTestState("recording"); setTestResult(""); }
+      else if (e.state === "transcribing") setTestState("processing");
+      else if (e.state === "idle") {
+        setTestState((prev) => (prev === "processing" ? "done" : prev));
+        setTestResult((prev) => prev || "(no speech detected — try again)");
+      }
+    }
+    if (e.type === "test_result") {
+      setTestResult(e.text || "(no speech detected — try again)");
       setTestState("done");
     }
-  };
+  });
 
   const finish = async () => {
     await patch({
@@ -110,7 +125,6 @@ export default function Onboarding() {
   };
 
   const needsKey = provider !== "ollama";
-  const TEST_STEP = 7;
   const canNext = [
     /* 0 welcome    */ true,
     /* 1 permissions*/ micOk === true,
@@ -327,17 +341,18 @@ export default function Onboarding() {
     /* 7 — Test */
     <div key="t" className="space-y-5 text-center">
       <h2 className="text-xl font-semibold">Test your dictation</h2>
-      <p className="text-sm text-muted">Click the mic and speak for a few seconds. First run downloads the model — it may take a minute.</p>
-      <button
-        onClick={runTest}
-        disabled={testState === "recording" || testState === "processing"}
-        aria-label="Start test recording"
+      <p className="text-sm text-muted">
+        Hold <span className="font-mono text-fg">{shortcut}</span> and speak, then release. First run downloads the model — it may take a minute.
+      </p>
+      <div
+        aria-label="Waiting for hotkey"
         className={cn("mx-auto w-24 h-24 rounded-full flex items-center justify-center transition-all",
-          testState === "recording" ? "bg-red-500 wt-glow" : "bg-accent hover:brightness-110 shadow-2xl shadow-accent/40")}
+          testState === "recording" ? "bg-red-500 wt-glow" : "bg-accent shadow-2xl shadow-accent/40")}
       >
         {testState === "processing" ? <Loader2 size={32} className="animate-spin text-white" /> : <Mic size={32} className="text-white" />}
-      </button>
+      </div>
       <div className="text-sm text-muted h-5">
+        {testState === "idle" && `Hold ${shortcut} to start`}
         {testState === "recording" && "Listening… speak now"}
         {testState === "processing" && "Transcribing…"}
       </div>

@@ -17,7 +17,7 @@ log = get_logger(__name__)
 
 # Overlay state machine: idle -> listening -> transcribing -> cleaning -> typing -> done
 EVENT_TYPES = {"status", "audio_level", "partial", "error", "notification",
-               "settings_changed", "model_download"}
+               "settings_changed", "model_download", "test_result"}
 
 
 class EventBus:

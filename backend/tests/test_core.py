@@ -530,8 +530,48 @@ class TestPipelineTranscribeRouting:
         assert called["local"]
 
 
-# -------------------------------------------------------------------- hardware
-class TestHardware:
+# ------------------------------------------------------------------ test mode
+class TestPipelineTestMode:
+    """Onboarding's mic test: real hotkey, but no cleanup/typing/history side effects."""
+
+    def _make_pipeline(self, monkeypatch, tmp_path):
+        import backend.services.pipeline as pm
+        original_history_store = pm.HistoryStore
+        monkeypatch.setattr(pm, "HistoryStore", lambda: original_history_store(tmp_path / "t.db"))
+        return pm.DictationPipeline()
+
+    def test_test_mode_publishes_result_and_skips_side_effects(self, monkeypatch, tmp_path):
+        import backend.services.pipeline as pm
+        from backend.services.whisper_service import TranscriptionResult
+
+        monkeypatch.setattr(pm, "load_settings", lambda: Settings())
+        monkeypatch.setattr(pm.whisper_service, "transcribe",
+                            lambda audio: TranscriptionResult("hello world", "en", 0.9, 0.1))
+
+        published = []
+        monkeypatch.setattr(pm.bus, "publish", lambda t, d=None: published.append((t, d)))
+
+        cleanup_called = {"v": False}
+        typing_called = {"v": False}
+        monkeypatch.setattr(pm.llm_service, "cleanup",
+                            lambda text: cleanup_called.__setitem__("v", True))
+        monkeypatch.setattr(pm.typing_service, "inject",
+                            lambda text: typing_called.__setitem__("v", True))
+
+        p = self._make_pipeline(monkeypatch, tmp_path)
+        p.set_test_mode(True)
+        p._process(np.ones(16000, dtype=np.float32) * 0.1)
+
+        assert cleanup_called["v"] is False
+        assert typing_called["v"] is False
+        assert p.history.stats()["total"] == 0
+        result_events = [d for t, d in published if t == "test_result"]
+        assert result_events == [{"text": "hello world", "language": "en"}]
+
+    def test_normal_mode_unaffected_by_default(self, monkeypatch, tmp_path):
+        import backend.services.pipeline as pm
+        p = self._make_pipeline(monkeypatch, tmp_path)
+        assert p._test_mode is False
     def test_recommendations_have_required_fields(self):
         rec = recommend_local_models()
         assert rec["tier"] in ("low", "mid", "high")

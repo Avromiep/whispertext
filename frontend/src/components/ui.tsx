@@ -202,7 +202,7 @@ export function Badge({ color = "gray", children, icon }: { color?: string; chil
 export function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
     <section className="mb-8 animate-slide-up">
-      <h2 className="text-base font-semibold"><WiggleText>{title}</WiggleText></h2>
+      <h2 className="text-base font-semibold">{title}</h2>
       {description && <p className="text-xs text-muted mt-0.5 mb-3">{description}</p>}
       {!description && <div className="mb-3" />}
       <Card>{children}</Card>
