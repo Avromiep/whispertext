@@ -31,7 +31,7 @@ class TestSettings:
         monkeypatch.setattr(ms, "_settings", None)
         updated = ms.update_settings({"ai": {"provider": "gemini"}})
         assert updated.ai.provider == "gemini"
-        assert updated.ai.enabled is True          # sibling untouched
+        assert updated.ai.enabled is False          # sibling untouched
         assert updated.hotkeys.push_to_talk == "windows+shift"
         # survives reload
         monkeypatch.setattr(ms, "_settings", None)
@@ -319,6 +319,37 @@ class TestGroqWhisper:
         svc = m.GroqWhisperService()
         r = asyncio.run(svc.validate())
         assert r["connected"] is False
+
+    def test_transcribe_strips_trailing_ellipsis(self, monkeypatch):
+        import backend.services.groq_whisper_service as m
+        monkeypatch.setattr(m, "get_api_key", lambda _pid: "fake-key")
+
+        class FakeResponse:
+            def raise_for_status(self): pass
+            def json(self): return {"text": "I'm thinking so..."}
+
+        class FakeClient:
+            async def post(self, *a, **kw):
+                return FakeResponse()
+
+        svc = m.GroqWhisperService()
+        svc._client = FakeClient()
+        audio = np.ones(16000, dtype=np.float32) * 0.1
+        result = asyncio.run(svc.transcribe(audio, language="en"))
+        assert result.text == "I'm thinking so"
+
+
+class TestTextUtils:
+    def test_strips_trailing_ellipsis_variants(self):
+        from backend.utils.text import strip_trailing_ellipsis
+        assert strip_trailing_ellipsis("I'm thinking so...") == "I'm thinking so"
+        assert strip_trailing_ellipsis("I'm thinking so…") == "I'm thinking so"
+        assert strip_trailing_ellipsis("I'm thinking so...  ") == "I'm thinking so"
+
+    def test_leaves_normal_sentences_alone(self):
+        from backend.utils.text import strip_trailing_ellipsis
+        assert strip_trailing_ellipsis("Hello there.") == "Hello there."
+        assert strip_trailing_ellipsis("Wait... really?") == "Wait... really?"
 
     def test_explicit_api_key_overrides_stored_key(self, monkeypatch):
         """The pipeline passes the backup key explicitly; it must win over

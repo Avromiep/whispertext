@@ -17,6 +17,7 @@ from backend.models.settings import load_settings
 from backend.services.event_bus import bus
 from backend.utils.hardware import detect_hardware
 from backend.utils.logger import get_logger
+from backend.utils.text import strip_trailing_ellipsis
 
 log = get_logger(__name__)
 
@@ -98,7 +99,7 @@ class WhisperService:
             # Independent utterances: skipping cross-segment conditioning is
             # faster and avoids repetition loops in noisy audio.
             condition_on_previous_text=False)
-        text = " ".join(seg.text.strip() for seg in segments).strip()
+        text = strip_trailing_ellipsis(" ".join(seg.text.strip() for seg in segments).strip())
         elapsed = time.monotonic() - t0
 
         log.info("Transcribed %.1fs audio in %.2fs (%s): %r",

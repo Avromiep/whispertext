@@ -58,7 +58,7 @@ class ProviderConfig(BaseModel):
 
 
 class AISettings(BaseModel):
-    enabled: bool = True
+    enabled: bool = False
     mode: AIMode = "hybrid"
     provider: str = "openai"                 # active provider id
     fallback_order: list[str] = Field(

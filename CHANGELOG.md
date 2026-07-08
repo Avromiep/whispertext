@@ -3,6 +3,22 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.12] — 2026-07-08
+
+### Changed
+- AI cleanup is now off by default for new installs — dictation types the
+  raw transcription immediately with no extra network round-trip, which is
+  also noticeably faster.
+- Onboarding no longer asks for an AI cleanup provider or API key. It's a
+  power-user feature you can turn on anytime from AI settings, not a setup
+  step for everyone.
+
+### Fixed
+- The recording overlay pill was hardcoded to the tan palette regardless of
+  theme. It now follows the app's light/dark setting.
+- Whisper sometimes ends a trailing-off, unfinished sentence with a literal
+  "..." — that's now stripped so it doesn't get typed.
+
 ## [1.0.11] — 2026-07-08
 
 ### Added

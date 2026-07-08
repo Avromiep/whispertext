@@ -20,6 +20,7 @@ import numpy as np
 from backend.services.whisper_service import TranscriptionResult
 from backend.utils.encryption import get_api_key
 from backend.utils.logger import get_logger
+from backend.utils.text import strip_trailing_ellipsis
 
 log = get_logger(__name__)
 
@@ -73,7 +74,7 @@ class GroqWhisperService:
             data=data,
         )
         r.raise_for_status()
-        text = r.json().get("text", "").strip()
+        text = strip_trailing_ellipsis(r.json().get("text", "").strip())
         elapsed = time.monotonic() - t0
         log.info("Groq transcribed %.1fs audio in %.2fs: %r",
                  audio.size / 16000, elapsed, text[:80])

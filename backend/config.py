@@ -7,7 +7,7 @@ from pathlib import Path
 
 APP_NAME = "WhisperText"
 _LEGACY_APP_NAME = "WhisperType"  # pre-rename name; migrated from once, below
-APP_VERSION = "1.0.11"
+APP_VERSION = "1.0.12"
 BACKEND_HOST = "127.0.0.1"
 BACKEND_PORT = 43117  # fixed local port; frontend discovers it via this constant
 

@@ -8,7 +8,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { useBackendEvents, WTEvent } from "../lib/ws";
-import { bridge } from "../lib/api";
+import { api, bridge } from "../lib/api";
 
 type OverlayState = "hidden" | "listening" | "transcribing" | "cleaning" | "typing" | "done" | "error";
 
@@ -28,8 +28,29 @@ export default function Overlay() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const startRef = useRef(0);
   const hideTimer = useRef<ReturnType<typeof setTimeout>>();
+  const [dark, setDark] = useState(() => (localStorage.getItem("wt-resolved-theme") ?? "light") === "dark");
+
+  // Mirrors App.tsx's theme resolution so the overlay matches the app even
+  // though it's a separate always-on-top window — refreshed on every
+  // settings change since this window is created once and never reloaded.
+  const syncTheme = () => {
+    api.getSettings().then((s) => {
+      const theme = s.general.theme;
+      const isDark = theme === "dark" ||
+        (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      setDark(isDark);
+      document.documentElement.classList.toggle("dark", isDark);
+      document.documentElement.classList.toggle("light", !isDark);
+      localStorage.setItem("wt-resolved-theme", isDark ? "dark" : "light");
+    }).catch(() => {});
+  };
+  useEffect(syncTheme, []);
 
   useBackendEvents((e: WTEvent) => {
+    if (e.type === "settings_changed") {
+      syncTheme();
+      return;
+    }
     if (e.type === "audio_level" && typeof e.level === "number") {
       level.current = e.level;
       return;
@@ -92,6 +113,7 @@ export default function Overlay() {
     let smooth = 0;
     let t = 0;
     const phases = Array.from({ length: STRANDS }, (_, i) => (i / STRANDS) * Math.PI * 2);
+    const strandRgb = dark ? "231, 233, 240" : "35, 32, 28";
 
     const draw = () => {
       t += 0.016;
@@ -111,7 +133,7 @@ export default function Overlay() {
       for (let s = 0; s < STRANDS; s++) {
         ctx.beginPath();
         const alpha = 0.12 + 0.55 * (s / STRANDS);
-        ctx.strokeStyle = `rgba(35, 32, 28, ${alpha * 0.6})`;
+        ctx.strokeStyle = `rgba(${strandRgb}, ${alpha * 0.6})`;
         ctx.lineWidth = 0.8;
         for (let x = 0; x <= W; x += 2) {
           const u = x / W;
@@ -132,7 +154,7 @@ export default function Overlay() {
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [state]);
+  }, [state, dark]);
 
   if (state === "hidden") return null;
 
@@ -146,7 +168,7 @@ export default function Overlay() {
           shadow-[0_8px_40px_rgba(0,0,0,0.45)] border
           ${state === "error"
             ? "bg-[#2a1215] border-red-500/40"
-            : "bg-[#e8dcc4] border-black/10"}`}
+            : "bg-elevated border-border"}`}
         style={{ width: 336 }}
       >
         {state === "error" ? (
@@ -167,10 +189,10 @@ export default function Overlay() {
             <canvas ref={canvasRef} className="h-[64px] flex-1" aria-hidden="true" />
             <div className="shrink-0 w-[74px] text-right">
               {state === "listening" && (
-                <span className="text-xs font-mono text-[#5c574d] tabular-nums">{mmss}</span>
+                <span className="text-xs font-mono text-muted tabular-nums">{mmss}</span>
               )}
               {processing && (
-                <span className="flex items-center justify-end gap-1.5 text-xs text-[#5c574d]">
+                <span className="flex items-center justify-end gap-1.5 text-xs text-muted">
                   <span className="wt-spinner" style={{ width: 12, height: 12 }} />
                   {STATUS_LABEL[state]}
                 </span>
