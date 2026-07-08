@@ -3,6 +3,25 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.7] — 2026-07-07
+
+### Added
+- Renamed the project from WhisperType to WhisperText throughout — source,
+  docs, project folder, %APPDATA% data directory, and the Windows keyring
+  service name for stored API keys. Existing settings, dictation history,
+  downloaded models, and API keys migrate automatically on first run via a
+  one-time copy (`backend/config.py::_migrate_legacy_app_dir`,
+  `backend/utils/encryption.py::migrate_legacy_keys`) — nothing was lost.
+- New app icon: an original tan-and-purple waveform mark drawn from the
+  app's own recording-overlay visual language (not derived from any other
+  product's logo), simplified for legibility down to 16px so the system
+  tray icon reads clearly, not just the full-size app icon. Same source
+  image drives both, so they always match.
+- Pushed the project to GitHub (`Avromiep/whispertext`, private) with a
+  proper `LICENSE` (MIT, matching what the README already claimed) and an
+  expanded `.gitignore`. Repo/update-check URLs in `package.json` and
+  `updater_service.py` now point at the real repo instead of a placeholder.
+
 ## [1.0.6] — 2026-07-07
 
 ### Fixed
