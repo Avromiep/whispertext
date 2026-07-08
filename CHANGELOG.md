@@ -3,6 +3,17 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.8] — 2026-07-07
+
+### Added
+- Onboarding now walks new users through getting a free Groq key right
+  after permissions — one button to Groq's sign-up page, paste, connect —
+  instead of that setup only existing on the Models page post-onboarding.
+  "Fully offline" remains an equal, no-signup option.
+- The AI-cleanup provider step is now an explicit opt-in checkbox (off by
+  default), matching the app's actual behavior everywhere else instead of
+  forcing every new user through a provider/key setup they may not want.
+
 ## [1.0.7] — 2026-07-07
 
 ### Added
