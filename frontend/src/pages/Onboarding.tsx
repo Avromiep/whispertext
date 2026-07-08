@@ -1,9 +1,10 @@
-/** First-launch setup wizard — 8 steps per spec. */
+/** First-launch setup wizard. */
 import { useEffect, useState } from "react";
 import {
   Mic, Keyboard, Sparkles, Check, X, ChevronRight, ChevronLeft, ShieldCheck, Loader2,
+  Zap, HardDrive, ExternalLink,
 } from "lucide-react";
-import { api } from "../lib/api";
+import { api, bridge } from "../lib/api";
 import { useSettings } from "../hooks/useSettings";
 import { Button, Card, SecretInput, cn } from "../components/ui";
 
@@ -26,9 +27,18 @@ const MODELS = [
 export default function Onboarding() {
   const { patch } = useSettings();
   const [step, setStep] = useState(0);
+
+  // Transcription engine (the star feature — Groq cloud or fully local).
+  const [engine, setEngine] = useState<"groq" | "local">("groq");
+  const [groqKey, setGroqKey] = useState("");
+  const [groqStatus, setGroqStatus] = useState<"idle" | "checking" | "ok" | "bad">("idle");
+
+  // Optional AI cleanup — off unless the user explicitly sets one up.
+  const [wantsCleanup, setWantsCleanup] = useState(false);
   const [provider, setProvider] = useState("openai");
   const [apiKey, setApiKey] = useState("");
   const [keyStatus, setKeyStatus] = useState<"idle" | "checking" | "ok" | "bad">("idle");
+
   const [model, setModel] = useState("small");
   const [micOk, setMicOk] = useState<boolean | null>(null);
   const [shortcut, setShortcut] = useState("windows+shift");
@@ -43,6 +53,17 @@ export default function Onboarding() {
       .then((d) => setMicOk(d.length > 0))
       .catch(() => setMicOk(false));
   }, [step]);
+
+  const validateGroqKey = async () => {
+    setGroqStatus("checking");
+    try {
+      await api.setApiKey("groq", groqKey);
+      const r = await api.validateGroq();
+      setGroqStatus(r.connected ? "ok" : "bad");
+    } catch {
+      setGroqStatus("bad");
+    }
+  };
 
   const validateKey = async () => {
     setKeyStatus("checking");
@@ -82,26 +103,28 @@ export default function Onboarding() {
   const finish = async () => {
     await patch({
       general: { onboarding_complete: true },
-      ai: { provider },
-      whisper: { model },
+      ai: wantsCleanup ? { enabled: true, provider } : { enabled: false },
+      whisper: { model, engine },
       hotkeys: { push_to_talk: shortcut },
     });
   };
 
   const needsKey = provider !== "ollama";
+  const TEST_STEP = 7;
   const canNext = [
-    true,
-    micOk === true,
-    true,
-    !needsKey || keyStatus === "ok",
-    true,
-    true,
-    testState === "done",
-    true,
+    /* 0 welcome    */ true,
+    /* 1 permissions*/ micOk === true,
+    /* 2 groq       */ engine === "local" || groqStatus === "ok",
+    /* 3 provider   */ true,
+    /* 4 api key    */ !wantsCleanup || !needsKey || keyStatus === "ok",
+    /* 5 model      */ true,
+    /* 6 shortcut   */ true,
+    /* 7 test       */ testState === "done",
+    /* 8 done       */ true,
   ][step];
 
   const steps = [
-    /* 1 — Welcome */
+    /* 0 — Welcome */
     <div key="w" className="text-center space-y-6">
       <div className="mx-auto w-16 h-16 rounded-2xl bg-accent flex items-center justify-center shadow-2xl shadow-accent/40">
         <Mic size={28} className="text-white" />
@@ -121,7 +144,7 @@ export default function Onboarding() {
       </p>
     </div>,
 
-    /* 2 — Permissions */
+    /* 1 — Permissions */
     <div key="p" className="space-y-4">
       <h2 className="text-xl font-semibold">Permissions</h2>
       <p className="text-sm text-muted">WhisperText needs your microphone and keyboard access to work everywhere.</p>
@@ -144,52 +167,135 @@ export default function Onboarding() {
       )}
     </div>,
 
-    /* 3 — Provider */
-    <div key="prov" className="space-y-4">
-      <h2 className="text-xl font-semibold">Choose your AI provider</h2>
-      <p className="text-sm text-muted">Cleans up your transcriptions. You can change this anytime.</p>
+    /* 2 — Instant transcription (Groq) or fully local */
+    <div key="groq" className="space-y-4">
+      <h2 className="text-xl font-semibold">Get instant dictation</h2>
+      <p className="text-sm text-muted">
+        WhisperText can transcribe the moment you release the key using a free cloud service —
+        or run entirely on your computer, fully private but a bit slower.
+      </p>
       <div className="grid grid-cols-1 gap-2">
-        {PROVIDERS.map((p) => (
-          <button key={p.id} onClick={() => { setProvider(p.id); setKeyStatus("idle"); }}
-            className={cn("flex items-center justify-between rounded-2xl border p-4 text-left transition-all",
-              provider === p.id ? "border-accent bg-accent/10" : "border-border bg-surface hover:border-accent/40")}>
+        <button onClick={() => setEngine("groq")}
+          className={cn("flex items-start justify-between rounded-2xl border p-4 text-left transition-all",
+            engine === "groq" ? "border-accent bg-accent/10" : "border-border bg-surface hover:border-accent/40")}>
+          <div className="flex items-start gap-3">
+            <Zap size={18} className="text-accent shrink-0 mt-0.5" />
             <div>
-              <div className="text-sm font-medium">{p.name}</div>
-              <div className="text-xs text-muted">{p.desc}</div>
+              <div className="text-sm font-medium">Instant (recommended)</div>
+              <div className="text-xs text-muted mt-0.5">Free, no credit card — about a minute to set up</div>
             </div>
-            {provider === p.id && <Check size={16} className="text-accent" />}
-          </button>
-        ))}
+          </div>
+          {engine === "groq" && <Check size={16} className="text-accent shrink-0" />}
+        </button>
+        <button onClick={() => setEngine("local")}
+          className={cn("flex items-start justify-between rounded-2xl border p-4 text-left transition-all",
+            engine === "local" ? "border-accent bg-accent/10" : "border-border bg-surface hover:border-accent/40")}>
+          <div className="flex items-start gap-3">
+            <HardDrive size={18} className="text-muted shrink-0 mt-0.5" />
+            <div>
+              <div className="text-sm font-medium">Fully offline</div>
+              <div className="text-xs text-muted mt-0.5">100% private, runs on your computer, a bit slower</div>
+            </div>
+          </div>
+          {engine === "local" && <Check size={16} className="text-accent shrink-0" />}
+        </button>
       </div>
+
+      {engine === "groq" && (
+        <Card className="space-y-3 animate-scale-in">
+          <div>
+            <div className="text-sm font-medium mb-1.5">Step 1 — Get your free key</div>
+            <Button size="sm" onClick={() => bridge ? bridge.openExternal("https://console.groq.com/keys") : window.open("https://console.groq.com/keys")}>
+              Open Groq sign-up <ExternalLink size={13} />
+            </Button>
+            <p className="text-xs text-muted mt-1.5">
+              No credit card needed. Sign up, click "Create API Key," then copy it.
+            </p>
+          </div>
+          <div>
+            <div className="text-sm font-medium mb-1.5">Step 2 — Paste it here</div>
+            <SecretInput value={groqKey} onChange={(v) => { setGroqKey(v); setGroqStatus("idle"); }} placeholder="gsk_…" />
+          </div>
+          <div className="flex items-center gap-3">
+            <Button variant="primary" size="sm" onClick={validateGroqKey} disabled={!groqKey || groqStatus === "checking"}>
+              {groqStatus === "checking" ? "Connecting…" : "Connect"}
+            </Button>
+            {groqStatus === "ok" && <span className="text-sm text-emerald-400 flex items-center gap-1"><Check size={14} /> Connected — you're all set!</span>}
+            {groqStatus === "bad" && <span className="text-sm text-red-400 flex items-center gap-1"><X size={14} /> Couldn't connect — check the key</span>}
+          </div>
+        </Card>
+      )}
     </div>,
 
-    /* 4 — API Key */
-    <div key="key" className="space-y-4">
-      <h2 className="text-xl font-semibold">{needsKey ? "Enter your API key" : "Local AI — no key needed"}</h2>
-      {needsKey ? (
-        <>
-          <p className="text-sm text-muted">Stored securely in Windows Credential Manager — never in plain text.</p>
-          <SecretInput label={`${provider} API key`} value={apiKey} onChange={(v) => { setApiKey(v); setKeyStatus("idle"); }}
-            placeholder="sk-…" />
-          <div className="flex items-center gap-3">
-            <Button variant="primary" size="sm" onClick={validateKey} disabled={!apiKey || keyStatus === "checking"}>
-              {keyStatus === "checking" ? "Validating…" : "Validate key"}
-            </Button>
-            {keyStatus === "ok" && <span className="text-sm text-emerald-400 flex items-center gap-1"><Check size={14} /> Connected</span>}
-            {keyStatus === "bad" && <span className="text-sm text-red-400 flex items-center gap-1"><X size={14} /> Invalid API key</span>}
-          </div>
-        </>
-      ) : (
-        <p className="text-sm text-muted">
-          Ollama runs entirely on your machine. Make sure it's installed and running — we'll auto-detect your models.
+    /* 3 — Optional AI cleanup provider */
+    <div key="prov" className="space-y-4">
+      <div>
+        <h2 className="text-xl font-semibold">Polish your text? <span className="text-sm font-normal text-muted">(optional)</span></h2>
+        <p className="text-sm text-muted mt-1">
+          Cleans up grammar and filler words after transcribing. Off by default — your words are typed exactly as transcribed unless you turn this on.
         </p>
+      </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={wantsCleanup} onChange={(e) => setWantsCleanup(e.target.checked)}
+          className="accent-[rgb(var(--accent))]" />
+        Set up AI cleanup now
+      </label>
+      {wantsCleanup && (
+        <div className="grid grid-cols-1 gap-2 animate-scale-in">
+          {PROVIDERS.map((p) => (
+            <button key={p.id} onClick={() => { setProvider(p.id); setKeyStatus("idle"); }}
+              className={cn("flex items-center justify-between rounded-2xl border p-4 text-left transition-all",
+                provider === p.id ? "border-accent bg-accent/10" : "border-border bg-surface hover:border-accent/40")}>
+              <div>
+                <div className="text-sm font-medium">{p.name}</div>
+                <div className="text-xs text-muted">{p.desc}</div>
+              </div>
+              {provider === p.id && <Check size={16} className="text-accent" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>,
+
+    /* 4 — API Key for cleanup provider */
+    <div key="key" className="space-y-4">
+      {!wantsCleanup ? (
+        <div className="text-center py-10">
+          <p className="text-sm text-muted">Skipping AI cleanup — you can turn it on anytime from Dictation settings.</p>
+        </div>
+      ) : (
+        <>
+          <h2 className="text-xl font-semibold">{needsKey ? "Enter your API key" : "Local AI — no key needed"}</h2>
+          {needsKey ? (
+            <>
+              <p className="text-sm text-muted">Stored securely in Windows Credential Manager — never in plain text.</p>
+              <SecretInput label={`${provider} API key`} value={apiKey} onChange={(v) => { setApiKey(v); setKeyStatus("idle"); }}
+                placeholder="sk-…" />
+              <div className="flex items-center gap-3">
+                <Button variant="primary" size="sm" onClick={validateKey} disabled={!apiKey || keyStatus === "checking"}>
+                  {keyStatus === "checking" ? "Validating…" : "Validate key"}
+                </Button>
+                {keyStatus === "ok" && <span className="text-sm text-emerald-400 flex items-center gap-1"><Check size={14} /> Connected</span>}
+                {keyStatus === "bad" && <span className="text-sm text-red-400 flex items-center gap-1"><X size={14} /> Invalid API key</span>}
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted">
+              Ollama runs entirely on your machine. Make sure it's installed and running — we'll auto-detect your models.
+            </p>
+          )}
+        </>
       )}
     </div>,
 
     /* 5 — Speech model */
     <div key="m" className="space-y-4">
-      <h2 className="text-xl font-semibold">Choose a speech model</h2>
-      <p className="text-sm text-muted">Downloads automatically on first use. "Small" is the sweet spot for most PCs.</p>
+      <h2 className="text-xl font-semibold">{engine === "groq" ? "Choose an offline fallback model" : "Choose a speech model"}</h2>
+      <p className="text-sm text-muted">
+        {engine === "groq"
+          ? "Used automatically if the cloud service is ever unreachable. Downloads on first use."
+          : "Downloads automatically on first use. \"Small\" is the sweet spot for most PCs."}
+      </p>
       <div className="space-y-2">
         {MODELS.map((m) => (
           <button key={m.id} onClick={() => setModel(m.id)}
@@ -275,7 +381,7 @@ export default function Onboarding() {
           ) : <div />}
           {step < steps.length - 1 ? (
             <Button variant="primary" onClick={() => setStep(step + 1)} disabled={!canNext}>
-              {step === 0 ? "Get Started" : step === 6 && testState === "done" ? "Looks Good" : "Continue"} <ChevronRight size={15} />
+              {step === 0 ? "Get Started" : step === TEST_STEP && testState === "done" ? "Looks Good" : "Continue"} <ChevronRight size={15} />
             </Button>
           ) : (
             <Button variant="primary" size="lg" onClick={finish}>Launch Application</Button>
