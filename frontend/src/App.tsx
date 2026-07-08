@@ -120,9 +120,7 @@ export default function App() {
         {/* Sidebar */}
         <aside className="w-52 shrink-0 border-r border-border bg-surface/60 flex flex-col">
           <div className="px-4 py-4 flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-accent flex items-center justify-center shadow-lg shadow-accent/30">
-              <Mic size={14} className="text-white" />
-            </div>
+            <img src="icon.png" alt="" className="w-7 h-7 rounded-lg shadow-lg shadow-accent/30" />
             <span className="font-semibold tracking-tight">WhisperText</span>
           </div>
           <nav className="flex-1 px-2 space-y-0.5" aria-label="Main navigation">

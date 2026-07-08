@@ -1,6 +1,6 @@
 /** About: versions, hardware, license, update check. */
 import { useEffect, useState } from "react";
-import { ExternalLink, Mic, RefreshCw } from "lucide-react";
+import { Check, Download, ExternalLink, RefreshCw } from "lucide-react";
 import { api, bridge, SystemInfo } from "../lib/api";
 import { Badge, Button, Card, PageHeader } from "../components/ui";
 
@@ -19,7 +19,6 @@ export default function AboutPage() {
   };
 
   const rows: [string, string][] = info ? [
-    ["Application", `WhisperText ${info.version}`],
     ["Backend", `Python · FastAPI · Faster-Whisper (CTranslate2)`],
     ["Operating system", info.hardware.os],
     ["CPU", `${info.hardware.cpu} (${info.hardware.cpu_cores} cores)`],
@@ -32,11 +31,10 @@ export default function AboutPage() {
     <div className="animate-fade-in">
       <PageHeader title="About" />
       <Card className="mb-4 text-center py-8">
-        <div className="mx-auto w-12 h-12 rounded-xl bg-accent flex items-center justify-center shadow-xl shadow-accent/30 mb-3">
-          <Mic size={20} className="text-white" />
-        </div>
+        <img src="icon.png" alt="" className="mx-auto w-16 h-16 rounded-2xl shadow-xl shadow-accent/30 mb-3" />
         <div className="font-semibold text-lg">WhisperText</div>
-        <div className="text-xs text-muted mt-1">Your AI voice assistant for every application.</div>
+        {info && <div className="text-xs text-muted mt-0.5">Version {info.version}</div>}
+        <div className="text-xs text-muted mt-2">Your AI voice assistant for every application.</div>
         <div className="mt-4 flex items-center justify-center gap-2">
           <Button size="sm" onClick={check} disabled={checking}>
             <RefreshCw size={13} className={checking ? "animate-spin" : ""} /> Check for updates
@@ -47,10 +45,19 @@ export default function AboutPage() {
           </Button>
         </div>
         {update && (
-          <div className="mt-3">
-            {update.update_available
-              ? <Badge color="blue">Update available: v{update.latest}</Badge>
-              : <Badge color="green">You're up to date (v{update.current})</Badge>}
+          <div className="mt-4 flex flex-col items-center gap-2 animate-scale-in">
+            {update.update_available ? (
+              <>
+                <Badge color="blue">New version available: v{update.latest}</Badge>
+                {update.url && (
+                  <Button size="sm" variant="primary" onClick={() => bridge?.openExternal(update.url)}>
+                    <Download size={13} /> Download v{update.latest}
+                  </Button>
+                )}
+              </>
+            ) : (
+              <Badge color="green" icon={<Check size={11} />}>You're up to date</Badge>
+            )}
           </div>
         )}
       </Card>
