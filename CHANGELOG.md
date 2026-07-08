@@ -3,6 +3,25 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.11] — 2026-07-08
+
+### Added
+- Onboarding's mic test now uses the real global hotkey — hold the
+  shortcut you just configured and speak, release to see the
+  transcription — instead of a separate click-to-test button.
+- Copy-to-clipboard button on each History entry, next to the
+  favorite star.
+- Models page's Groq Cloud section now shows whether an API key is
+  configured.
+
+### Changed
+- History page now shows the 5 most recent dictations by default,
+  with a "View all" button to expand the full list.
+
+### Fixed
+- Removed the leftover hover wiggle from in-page section headings
+  (e.g. "Microphone") — it's now limited to the sidebar nav only.
+
 ## [1.0.10] — 2026-07-08
 
 ### Changed
