@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root, .dark {
+  --bg: 11 13 18;          /* #0b0d12 */
+  --surface: 17 20 27;     /* #11141b */
+  --elevated: 24 28 38;    /* #181c26 */
+  --border: 39 44 58;      /* #272c3a */
+  --fg: 231 233 240;       /* #e7e9f0 */
+  --muted: 138 145 163;    /* #8a91a3 */
+  --accent: 124 111 255;   /* #7c6fff */
+}
+
+/* Warm tan palette matching the recording overlay (#e8dcc4). */
+.light {
+  --bg: 243 234 217;       /* #f3ead9 */
+  --surface: 250 245 235;  /* #faf5eb */
+  --elevated: 232 220 196; /* #e8dcc4 — same tan as the overlay */
+  --border: 214 199 168;   /* #d6c7a8 */
+  --fg: 58 47 34;          /* #3a2f22 */
+  --muted: 138 122 99;     /* #8a7a63 */
+  --accent: 124 111 255;   /* #7c6fff */
+}
+
+html, body, #root { height: 100%; }
+body {
+  @apply bg-bg text-fg antialiased;
+  font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  font-size: calc(14px * var(--font-scale, 1));
+}
+
+*:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { @apply bg-border rounded-full; }
+::-webkit-scrollbar-track { background: transparent; }
+
+@keyframes wt-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(var(--accent) / 0.45); }
+  50% { box-shadow: 0 0 0 14px rgb(var(--accent) / 0); }
+}
+.wt-glow { animation: wt-pulse 1.6s ease-in-out infinite; }
+
+@keyframes wt-spin { to { transform: rotate(360deg); } }
+.wt-spinner {
+  width: 18px; height: 18px; border-radius: 9999px;
+  border: 2px solid rgb(var(--muted) / 0.3);
+  border-top-color: rgb(var(--accent));
+  animation: wt-spin 0.8s linear infinite;
+}
+
+/* Per-letter hover wiggle, staggered across characters for a wave effect. */
+@keyframes wt-letter-wiggle {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-3px) rotate(-6deg); }
+  50% { transform: translateY(0) rotate(5deg); }
+  75% { transform: translateY(-2px) rotate(-3deg); }
+}
+.wt-wiggle-text { display: inline-block; }
+.wt-wiggle-char { display: inline-block; }
+.wt-wiggle-text:hover .wt-wiggle-char {
+  animation: wt-letter-wiggle 0.5s ease-in-out;
+  animation-delay: calc(var(--wt-i) * 28ms);
+}

@@ -1,0 +1,55 @@
+{
+  "name": "whispertext",
+  "productName": "WhisperText",
+  "version": "1.0.0",
+  "description": "AI voice dictation for every application",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "dev:electron": "cross-env WT_DEV=1 electron .",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "start": "electron .",
+    "dist": "vite build && electron-builder --win nsis --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9",
+    "lucide-react": "^0.469.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  },
+  "build": {
+    "appId": "com.whispertext.app",
+    "productName": "WhisperText",
+    "directories": { "output": "release" },
+    "files": ["dist/**", "electron/**", "assets/**"],
+    "extraResources": [
+      { "from": "../backend-dist", "to": "backend", "filter": ["**/*"] }
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "runAfterFinish": true
+    },
+    "publish": { "provider": "github", "owner": "Avromiep", "repo": "whispertext" }
+  }
+}

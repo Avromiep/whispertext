@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WhisperText</title>
+    <script>
+      // Apply the theme synchronously, before first paint, using the value
+      // cached by App.tsx on the previous launch — avoids a flash of the
+      // wrong theme while the real settings load asynchronously from the
+      // backend. Falls back to "light" (the app default) on first-ever launch.
+      (function () {
+        var cached = localStorage.getItem("wt-resolved-theme") || "light";
+        document.documentElement.classList.add(cached);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
