@@ -129,7 +129,7 @@ export default function App() {
                 key={id}
                 onClick={() => setPage(id)}
                 className={cn(
-                  "w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors duration-150",
+                  "wt-wiggle-area w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors duration-150",
                   page === id ? "bg-elevated text-fg font-medium" : "text-muted hover:text-fg hover:bg-elevated/50",
                 )}
                 title={`Ctrl+${i + 1}`}

@@ -3,6 +3,22 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.10] — 2026-07-08
+
+### Changed
+- Repo made public — "Check for Updates" now genuinely detects releases
+  instead of silently falling back (GitHub's API can't see private-repo
+  releases without auth, which a distributed desktop app can't safely embed).
+- Sidebar nav wiggle now triggers from anywhere on the button (icon,
+  padding, whitespace), not just the letters themselves.
+- Title bar and taskbar now show the real app icon instead of Electron's
+  generic default (the window never had an explicit `icon` set).
+
+### Fixed
+- Removed the hover wiggle from page titles (e.g. "About" at the top of
+  each page) — it read as unintentional there. Sidebar nav and in-page
+  section headings keep it.
+
 ## [1.0.9] — 2026-07-07
 
 ### Fixed

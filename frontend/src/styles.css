@@ -67,3 +67,9 @@ body {
   animation: wt-letter-wiggle 0.5s ease-in-out;
   animation-delay: calc(var(--wt-i) * 28ms);
 }
+/* Wider hover target (e.g. a full nav button) that should trigger the same
+   wiggle on its inner WiggleText, not just when hovering the letters themselves. */
+.wt-wiggle-area:hover .wt-wiggle-char {
+  animation: wt-letter-wiggle 0.5s ease-in-out;
+  animation-delay: calc(var(--wt-i) * 28ms);
+}

@@ -214,7 +214,7 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
   return (
     <div className="flex items-start justify-between mb-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight"><WiggleText>{title}</WiggleText></h1>
+        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
         {subtitle && <p className="text-sm text-muted mt-1">{subtitle}</p>}
       </div>
       {actions}

@@ -75,6 +75,7 @@ function showSettings() {
   settingsWin = new BrowserWindow({
     width: 1080, height: 720, minWidth: 900, minHeight: 600,
     title: "WhisperText",
+    icon: path.join(__dirname, "..", "assets", "icon.ico"),
     backgroundColor: "#f3ead9", // matches the default tan theme — avoids a color flash on launch
     autoHideMenuBar: true,
     show: false,
