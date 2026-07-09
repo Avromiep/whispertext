@@ -3,6 +3,20 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.13] — 2026-07-08
+
+### Added
+- Updates now install in the background. When a new version is found it
+  downloads automatically, and the About page shows a one-click
+  "Restart & install" button — no more manually re-downloading the
+  installer from GitHub (the manual link remains as a fallback).
+
+### Fixed
+- AI provider cards said "Ready" for every local provider (Ollama,
+  LM Studio…) even when nothing was set up. "Ready" now only appears for
+  cloud providers with a saved API key, and the provider actually in use
+  shows an "In use" badge.
+
 ## [1.0.12] — 2026-07-08
 
 ### Changed

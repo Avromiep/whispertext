@@ -18,6 +18,7 @@ let overlayWin = null;
 let tray = null;
 let backendProc = null;
 let quitting = false;
+let updateDownloaded = false;
 
 // ---------------------------------------------------------------- single lock
 if (!app.requestSingleInstanceLock()) {
@@ -131,6 +132,16 @@ ipcMain.handle("updates:check", async () => {
     return { status: "ok", version: r?.updateInfo?.version };
   } catch (e) { return { status: "error", message: String(e) }; }
 });
+ipcMain.handle("updates:is-ready", () => updateDownloaded);
+ipcMain.on("updates:install", () => {
+  if (!app.isPackaged || !updateDownloaded) return;
+  try {
+    const { autoUpdater } = require("electron-updater");
+    quitting = true;
+    stopBackend();
+    autoUpdater.quitAndInstall(false, true); // show installer UI, relaunch when done
+  } catch { /* fall back to manual download from the About page */ }
+});
 
 // ------------------------------------------------------------------------ tray
 function apiPost(pathname) {
@@ -186,6 +197,7 @@ app.whenReady().then(() => {
       const { autoUpdater } = require("electron-updater");
       autoUpdater.autoDownload = true;
       autoUpdater.on("update-downloaded", () => {
+        updateDownloaded = true;
         if (settingsWin) settingsWin.webContents.send("update-ready");
       });
       autoUpdater.checkForUpdatesAndNotify().catch(() => {});

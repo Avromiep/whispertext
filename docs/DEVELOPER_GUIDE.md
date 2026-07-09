@@ -71,6 +71,11 @@ browser at `http://localhost:5173` (Electron-only APIs are behind the
    `extraResources` and `main.cjs` spawns it in packaged mode.
 3. Auto-updates use electron-updater's GitHub provider (`publish` block in
    `package.json`); the backend also exposes `/updates/check` for the UI.
+4. **Every GitHub release must attach three files** from `frontend/release/`:
+   the installer exe, its `.exe.blockmap`, and `latest.yml`. electron-updater
+   reads `latest.yml` from the newest release to discover updates and the
+   blockmap to download only the changed blocks — without them, installed
+   apps can't self-update and fall back to the manual GitHub download link.
 
 ## Extending
 

@@ -8,8 +8,15 @@ export default function AboutPage() {
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [update, setUpdate] = useState<{ current: string; latest: string; update_available: boolean; url: string } | null>(null);
   const [checking, setChecking] = useState(false);
+  const [updateReady, setUpdateReady] = useState(false);
 
-  useEffect(() => { api.systemInfo().then(setInfo).catch(() => {}); }, []);
+  useEffect(() => {
+    api.systemInfo().then(setInfo).catch(() => {});
+    // The background download may have finished before this page was opened,
+    // so ask for the current state as well as subscribing to the event.
+    bridge?.isUpdateReady?.().then((r) => r && setUpdateReady(true)).catch(() => {});
+    bridge?.onUpdateReady(() => setUpdateReady(true));
+  }, []);
 
   const check = async () => {
     setChecking(true);
@@ -44,14 +51,24 @@ export default function AboutPage() {
             <ExternalLink size={13} /> GitHub
           </Button>
         </div>
-        {update && (
+        {(update || updateReady) && (
           <div className="mt-4 flex flex-col items-center gap-2 animate-scale-in">
-            {update.update_available ? (
+            {updateReady ? (
+              <>
+                <Badge color="green" icon={<Check size={11} />}>Update downloaded</Badge>
+                <Button size="sm" variant="primary" onClick={() => bridge?.installUpdate()}>
+                  <RefreshCw size={13} /> Restart & install{update?.latest ? ` v${update.latest}` : ""}
+                </Button>
+              </>
+            ) : update?.update_available ? (
               <>
                 <Badge color="blue">New version available: v{update.latest}</Badge>
+                <p className="text-xs text-muted max-w-xs">
+                  Downloading in the background — a "Restart &amp; install" button appears here when it's ready.
+                </p>
                 {update.url && (
-                  <Button size="sm" variant="primary" onClick={() => bridge?.openExternal(update.url)}>
-                    <Download size={13} /> Download v{update.latest}
+                  <Button size="sm" variant="ghost" onClick={() => bridge?.openExternal(update.url)}>
+                    <Download size={13} /> Download manually instead
                   </Button>
                 )}
               </>

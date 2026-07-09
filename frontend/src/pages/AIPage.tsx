@@ -84,9 +84,11 @@ export default function AIPage() {
                 <div className="text-sm font-medium">{p.name}</div>
                 <div className="text-[11px] text-muted">{p.local ? "Local · offline · free" : "Cloud API"}</div>
               </div>
-              {p.configured
-                ? <Badge color="green">Ready</Badge>
-                : <Badge color="yellow">Needs key</Badge>}
+              {active === p.id
+                ? <Badge color="purple" icon={<Check size={11} />}>In use</Badge>
+                : p.needs_api_key
+                  ? (p.configured ? <Badge color="green">Ready</Badge> : <Badge color="yellow">Needs key</Badge>)
+                  : null}
             </button>
           ))}
         </div>

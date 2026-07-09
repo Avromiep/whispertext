@@ -70,6 +70,8 @@ export interface WTBridge {
   openExternal(url: string): void; restart(): void;
   getLoginItem(): Promise<boolean>; setLoginItem(v: boolean): Promise<boolean>;
   checkUpdates(): Promise<{ status: string; version?: string; message?: string }>;
+  isUpdateReady(): Promise<boolean>;
+  installUpdate(): void;
   onNavigate(cb: (page: string) => void): void;
   onUpdateReady(cb: () => void): void;
 }
