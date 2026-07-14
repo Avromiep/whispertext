@@ -9,8 +9,8 @@ contextBridge.exposeInMainWorld("whispertext", {
   getLoginItem: () => ipcRenderer.invoke("app:get-login-item"),
   setLoginItem: (v) => ipcRenderer.invoke("app:set-login-item", v),
   checkUpdates: () => ipcRenderer.invoke("updates:check"),
-  isUpdateReady: () => ipcRenderer.invoke("updates:is-ready"),
+  getUpdateState: () => ipcRenderer.invoke("updates:get-state"),
   installUpdate: () => ipcRenderer.send("updates:install"),
   onNavigate: (cb) => ipcRenderer.on("navigate", (_e, page) => cb(page)),
-  onUpdateReady: (cb) => ipcRenderer.on("update-ready", () => cb()),
+  onUpdateState: (cb) => ipcRenderer.on("update-state", (_e, state) => cb(state)),
 });

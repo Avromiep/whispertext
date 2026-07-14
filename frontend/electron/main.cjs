@@ -18,7 +18,6 @@ let overlayWin = null;
 let tray = null;
 let backendProc = null;
 let quitting = false;
-let updateDownloaded = false;
 
 // ---------------------------------------------------------------- single lock
 if (!app.requestSingleInstanceLock()) {
@@ -124,23 +123,56 @@ ipcMain.on("app:restart", () => { quitting = true; stopBackend(); app.relaunch()
 ipcMain.on("app:open-external", (_e, url) => {
   if (/^https?:\/\//.test(url)) shell.openExternal(url);
 });
-ipcMain.handle("updates:check", async () => {
-  if (!app.isPackaged) return { status: "dev" };
-  try {
-    const { autoUpdater } = require("electron-updater");
-    const r = await autoUpdater.checkForUpdates();
-    return { status: "ok", version: r?.updateInfo?.version };
-  } catch (e) { return { status: "error", message: String(e) }; }
-});
-ipcMain.handle("updates:is-ready", () => updateDownloaded);
+// --------------------------------------------------------------------- updates
+// The whole flow lives in-app: check → download (progress streamed to the
+// renderer) → "ready" → silent install + relaunch. No browser hand-off.
+let updateState = { state: app.isPackaged ? "idle" : "dev" };
+let updaterInstance = null;
+
+function setUpdateState(next) {
+  updateState = next;
+  if (settingsWin && !settingsWin.isDestroyed()) {
+    settingsWin.webContents.send("update-state", updateState);
+  }
+}
+
+function getUpdater() {
+  if (updaterInstance) return updaterInstance;
+  const { autoUpdater } = require("electron-updater");
+  autoUpdater.autoDownload = true;
+  autoUpdater.on("checking-for-update", () => setUpdateState({ state: "checking" }));
+  autoUpdater.on("update-available", (info) =>
+    setUpdateState({ state: "downloading", version: info.version, percent: 0 }));
+  autoUpdater.on("update-not-available", () => setUpdateState({ state: "up-to-date" }));
+  autoUpdater.on("download-progress", (p) => setUpdateState({
+    state: "downloading", version: updateState.version,
+    percent: p.percent, transferred: p.transferred, total: p.total,
+    bytesPerSecond: p.bytesPerSecond,
+  }));
+  autoUpdater.on("update-downloaded", (info) =>
+    setUpdateState({ state: "ready", version: info.version }));
+  autoUpdater.on("error", (err) => setUpdateState({
+    state: "error",
+    message: String(err?.message || err).split("\n")[0],
+  }));
+  updaterInstance = autoUpdater;
+  return autoUpdater;
+}
+
+function checkForUpdates() {
+  if (!app.isPackaged) return;
+  try { getUpdater().checkForUpdates().catch(() => {}); } catch { /* updater unavailable */ }
+}
+
+ipcMain.handle("updates:check", () => { checkForUpdates(); return updateState; });
+ipcMain.handle("updates:get-state", () => updateState);
 ipcMain.on("updates:install", () => {
-  if (!app.isPackaged || !updateDownloaded) return;
+  if (!app.isPackaged || updateState.state !== "ready") return;
   try {
-    const { autoUpdater } = require("electron-updater");
     quitting = true;
     stopBackend();
-    autoUpdater.quitAndInstall(false, true); // show installer UI, relaunch when done
-  } catch { /* fall back to manual download from the About page */ }
+    getUpdater().quitAndInstall(true, true); // silent install, relaunch when done
+  } catch { /* keep running; the renderer still shows the ready state */ }
 });
 
 // ------------------------------------------------------------------------ tray
@@ -177,7 +209,7 @@ function createTray() {
     { label: "Settings", click: () => showSettings() },
     { label: "History", click: () => navigateTo("history") },
     { type: "separator" },
-    { label: "Check for Updates", click: () => navigateTo("about") },
+    { label: "Check for Updates", click: () => { checkForUpdates(); navigateTo("about"); } },
     { label: "Restart", click: () => { quitting = true; stopBackend(); app.relaunch(); app.exit(0); } },
     { label: "Quit", click: () => { quitting = true; app.quit(); } },
   ]));
@@ -192,18 +224,8 @@ app.whenReady().then(() => {
   createTray();
   showSettings();
 
-  if (app.isPackaged) {
-    try {
-      const { autoUpdater } = require("electron-updater");
-      autoUpdater.autoDownload = true;
-      autoUpdater.on("update-downloaded", () => {
-        updateDownloaded = true;
-        if (settingsWin) settingsWin.webContents.send("update-ready");
-      });
-      autoUpdater.checkForUpdatesAndNotify().catch(() => {});
-      setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 6 * 3600 * 1000);
-    } catch { /* updater unavailable in unsigned builds */ }
-  }
+  checkForUpdates();
+  setInterval(checkForUpdates, 6 * 3600 * 1000);
 });
 
 app.on("window-all-closed", () => { /* tray app: stay alive with no windows */ });

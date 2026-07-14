@@ -64,15 +64,27 @@ export const api = {
   checkUpdates: () => request<{ current: string; latest: string; update_available: boolean; url: string }>("/updates/check", { method: "POST" }),
 };
 
+/** Auto-update progress as reported by the Electron main process.
+ * "dev" means unpackaged builds, where the auto-updater is unavailable. */
+export interface UpdateState {
+  state: "idle" | "checking" | "downloading" | "ready" | "up-to-date" | "error" | "dev";
+  version?: string;
+  percent?: number;
+  transferred?: number;
+  total?: number;
+  bytesPerSecond?: number;
+  message?: string;
+}
+
 /** Bridge exposed by the Electron preload script (absent in plain-browser dev). */
 export interface WTBridge {
   showOverlay(): void; hideOverlay(): void; openSettings(): void;
   openExternal(url: string): void; restart(): void;
   getLoginItem(): Promise<boolean>; setLoginItem(v: boolean): Promise<boolean>;
-  checkUpdates(): Promise<{ status: string; version?: string; message?: string }>;
-  isUpdateReady(): Promise<boolean>;
+  checkUpdates(): Promise<UpdateState>;
+  getUpdateState(): Promise<UpdateState>;
   installUpdate(): void;
   onNavigate(cb: (page: string) => void): void;
-  onUpdateReady(cb: () => void): void;
+  onUpdateState(cb: (state: UpdateState) => void): void;
 }
 export const bridge: WTBridge | undefined = (window as unknown as { whispertext?: WTBridge }).whispertext;

@@ -3,6 +3,16 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.14] — 2026-07-14
+
+### Changed
+- The whole update flow now happens in-app: checking, a live download
+  progress bar (MB and percent), then a "Relaunch & update" button once
+  it's ready. Installing runs silently and relaunches automatically —
+  no installer wizard, and no hand-off to the GitHub releases page.
+- The tray's "Check for Updates" now starts a real check as it opens
+  the About page, instead of only navigating there.
+
 ## [1.0.13] — 2026-07-08
 
 ### Added
