@@ -10,6 +10,7 @@ import asyncio
 import threading
 from contextlib import asynccontextmanager
 
+import numpy as np
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.api.routes import router
 from backend.config import APP_VERSION, BACKEND_HOST, BACKEND_PORT
 from backend.models.settings import load_settings
+from backend.services.audio_service import speech_seconds
 from backend.services.event_bus import bus
 from backend.services.hotkey_service import hotkey_service
 from backend.services.pipeline import pipeline
@@ -36,6 +38,16 @@ def _warm_whisper() -> None:
         bus.notify(f"Speech model not ready yet: {exc}", "warning")
 
 
+def _warm_vad() -> None:
+    """Preload Silero, which gates every recording — including on the Groq
+    path, where it is the only thing standing between an empty room and a
+    hallucinated word."""
+    try:
+        speech_seconds(np.zeros(16000, dtype=np.float32), 16000)
+    except Exception as exc:
+        log.warning("VAD preload deferred: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = load_settings()
@@ -53,6 +65,7 @@ async def lifespan(app: FastAPI):
 
     # Background warm-up + history retention (non-blocking).
     threading.Thread(target=_warm_whisper, daemon=True).start()
+    threading.Thread(target=_warm_vad, daemon=True).start()
     retention = settings.history.retention_days
     if settings.history.enabled and retention > 0:
         threading.Thread(target=pipeline.history.purge_older_than,

@@ -19,14 +19,40 @@ log = get_logger(__name__)
 
 MAX_RECORD_SECONDS = 600  # hard safety cap for hands-free mode
 
-# Peak short-frame RMS below this means the buffer holds no speech at all —
-# only room tone. Deliberately well under even a quiet voice (which reaches
-# ~0.02+) so that real speech is never discarded; typical room tone is <0.003.
-SILENCE_RMS = 0.005
+# Loudness alone cannot tell speech from room tone: on a noisy input the noise
+# floor (measured at 0.0113 peak frame RMS on a Steam virtual mic) overlaps
+# quiet speech (0.0126) almost exactly. Silero VAD decides instead — it listens
+# for speech structure, not level. This value is only a cheap short-circuit for
+# input that is essentially digital silence, well below any real noise floor.
+SILENCE_RMS = 0.0005
 # Auto-gain divides by the peak, so a near-silent buffer would be amplified up
 # to 45x — turning inaudible hiss into a loud signal for Whisper to hallucinate
 # words from. Never boost a buffer quieter than this.
 MIN_GAIN_PEAK = 0.02
+
+
+def speech_seconds(audio: np.ndarray, rate: int) -> float:
+    """Seconds of actual speech in `audio`, per Silero VAD. 0.0 means silence.
+
+    This is the same detector the local Whisper path gets for free via
+    `vad_filter=True`, which is why only the Groq path ever typed a word from
+    an empty room. Running it here covers every engine.
+    """
+    if audio.size == 0:
+        return 0.0
+    if rate != 16000:  # Silero is 16 kHz only; fall back to the loudness check
+        return 1.0 if peak_frame_rms(audio, rate) >= SILENCE_RMS else 0.0
+    try:
+        from faster_whisper.vad import VadOptions, get_speech_timestamps
+        segments = get_speech_timestamps(
+            audio,
+            VadOptions(min_speech_duration_ms=200, min_silence_duration_ms=500,
+                       speech_pad_ms=0),  # unpadded: we want the true duration
+            sampling_rate=rate)
+    except Exception:  # VAD assets unavailable — never block a dictation
+        log.exception("VAD unavailable; falling back to a loudness check")
+        return 1.0 if peak_frame_rms(audio, rate) >= SILENCE_RMS else 0.0
+    return sum(s["end"] - s["start"] for s in segments) / rate
 
 
 def peak_frame_rms(audio: np.ndarray, rate: int, frame_ms: int = 20) -> float:
@@ -52,6 +78,12 @@ class AudioService:
         self._lock = threading.Lock()
         self._recording = False
         self._started_at = 0.0
+        self._last_speech_s = 0.0
+
+    @property
+    def last_speech_seconds(self) -> float:
+        """Speech detected in the most recent recording — see `speech_seconds`."""
+        return self._last_speech_s
 
     # ------------------------------------------------------------------ devices
     @staticmethod
@@ -139,13 +171,15 @@ class AudioService:
         s = load_settings().audio
         audio = pcm.astype(np.float32) / 32768.0
 
-        # Measured before any gain: if nothing was actually said, hand back an
+        # Checked before any gain: if nothing was actually said, hand back an
         # empty buffer so no engine ever sees silence to invent words from.
-        loudest = peak_frame_rms(audio, s.sample_rate)
-        if audio.size and loudest < SILENCE_RMS:
-            log.info("Discarding silent recording (peak frame RMS %.4f < %.4f)",
-                     loudest, SILENCE_RMS)
-            return np.zeros(0, dtype=np.float32)
+        if audio.size:
+            self._last_speech_s = speech_seconds(audio, s.sample_rate)
+            if self._last_speech_s == 0.0:
+                log.info("Discarding recording with no speech (%.2fs, peak frame "
+                         "RMS %.4f)", audio.size / s.sample_rate,
+                         peak_frame_rms(audio, s.sample_rate))
+                return np.zeros(0, dtype=np.float32)
 
         if s.auto_gain and audio.size:
             peak = float(np.max(np.abs(audio)))

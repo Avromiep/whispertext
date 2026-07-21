@@ -3,6 +3,21 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.16] — 2026-07-21
+
+### Fixed
+- Silence still typed a word ("yeah", "Thank you") on microphones with a
+  high noise floor. 1.0.15 gated on loudness, which cannot work: on a
+  noisy input the noise floor and quiet speech overlap almost exactly —
+  measured at 0.0113 against 0.0126 peak frame RMS on a virtual mic, an
+  11% gap. Recordings are now screened by Silero voice-activity detection,
+  which listens for speech structure rather than level. This is the same
+  detector the local Whisper engine always had via `vad_filter`, and its
+  absence on the Groq path is why only Groq users ever saw a stray word.
+  Verified against the actual audio that produced "Thank you.": silence is
+  now discarded before upload, while speech recorded in that same room
+  still transcribes at every volume down to a peak of 0.02.
+
 ## [1.0.15] — 2026-07-21
 
 ### Fixed

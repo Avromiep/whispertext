@@ -3,16 +3,18 @@ from __future__ import annotations
 
 import asyncio
 import time
+import wave
+from pathlib import Path
 
 import numpy as np
 import pytest
 
 from backend.models.settings import Settings
-from backend.services.audio_service import (SILENCE_RMS, AudioService,
-                                            audio_service, peak_frame_rms)
+from backend.services.audio_service import (AudioService, audio_service,
+                                            speech_seconds)
 from backend.services.llm_service import (PROMPT_PRESETS, PROVIDER_CLASSES,
                                           LLMService)
-from backend.services.pipeline import pipeline
+from backend.services.pipeline import MIN_FILLER_SPEECH_S, pipeline
 from backend.storage.database import HistoryStore
 from backend.utils.retry import retry_async
 from backend.utils.hardware import recommend_local_models
@@ -203,47 +205,78 @@ class TestAudioProcessing:
 
 # ------------------------------------------------------- silence hallucination
 class TestSilenceRejection:
-    """Whisper invents a filler word ("So", "Okay") when handed silence, so
-    silence must never reach an engine — least of all Groq, which has no VAD."""
+    """Handed silence, Whisper invents a filler ("So", "Okay", "Thank you")
+    instead of returning nothing, so silence must never reach an engine —
+    least of all Groq, which has no voice-activity filter of its own.
+
+    Loudness cannot make this call: on a noisy input the noise floor and quiet
+    speech overlap (measured 0.0113 vs 0.0126 peak frame RMS on one machine),
+    so these tests exercise the real Silero detector against real speech.
+    """
 
     RATE = 16000
+    FIXTURES = Path(__file__).parent / "fixtures"
 
     @staticmethod
     def _pcm(signal):
         return (np.clip(signal, -1, 1) * 32767).astype(np.int16)
 
-    def _speech(self, seconds=1.5, amplitude=0.3):
-        t = np.linspace(0, seconds, int(self.RATE * seconds), endpoint=False)
-        wave = sum(np.sin(2 * np.pi * f * t) / (i + 1)
-                   for i, f in enumerate((150, 300, 450, 900)))
-        return (wave / 2.2) * amplitude
+    @classmethod
+    def _load(cls, name):
+        with wave.open(str(cls.FIXTURES / name), "rb") as w:
+            pcm = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
+        audio = pcm.astype(np.float32) / 32768.0
+        return audio / max(float(np.max(np.abs(audio))), 1e-9)
 
-    def test_peak_frame_rms_ignores_surrounding_silence(self):
-        quiet = np.zeros(self.RATE, dtype=np.float32)
-        burst = np.asarray(self._speech(0.2, 0.4), dtype=np.float32)
-        audio = np.concatenate([quiet, burst, quiet])
-        # A whole-buffer RMS would average the burst away; framewise must not.
-        assert peak_frame_rms(audio, self.RATE) > SILENCE_RMS * 4
+    @classmethod
+    def _noise(cls, seconds, level=0.0113, seed=0):
+        """Room tone at a realistic noise-floor level for a live microphone."""
+        rng = np.random.default_rng(seed)
+        n = int(cls.RATE * seconds)
+        t = np.linspace(0, seconds, n, endpoint=False)
+        tone = rng.normal(0, level / 3, n)
+        tone += 0.4 * level * np.sin(2 * np.pi * 60 * t)      # mains hum
+        return tone.astype(np.float32)
 
+    @classmethod
+    def _spoken(cls, name="speech_sentence_16k.wav", peak=0.15, pad_s=1.0):
+        """Real speech at `peak`, laid into room tone with lead-in and lead-out."""
+        clip = cls._load(name) * peak
+        n = clip.size + int(cls.RATE * pad_s * 2)
+        audio = cls._noise(n / cls.RATE, seed=4)[:n].copy()
+        start = int(cls.RATE * pad_s)
+        audio[start:start + clip.size] += clip
+        return np.clip(audio, -1, 1).astype(np.float32)
+
+    # -- the gate ------------------------------------------------------------
     def test_room_tone_is_discarded(self):
-        rng = np.random.default_rng(0)
-        tone = rng.normal(0, 0.0015, self.RATE * 3)
-        assert audio_service._post_process(self._pcm(tone)).size == 0
+        assert audio_service._post_process(self._pcm(self._noise(3))).size == 0
 
     def test_digital_silence_is_discarded(self):
         assert audio_service._post_process(self._pcm(np.zeros(self.RATE * 2))).size == 0
 
-    @pytest.mark.parametrize("amplitude", [0.03, 0.08, 0.35])
-    def test_speech_survives_at_every_volume(self, amplitude):
-        audio = self._speech(2.0, amplitude)
+    def test_loud_room_tone_is_still_discarded(self):
+        """A noisy mic must not buy its way past the gate on level alone."""
+        assert audio_service._post_process(self._pcm(self._noise(3, level=0.03))).size == 0
+
+    @pytest.mark.parametrize("peak", [0.02, 0.05, 0.15, 0.5])
+    def test_speech_survives_at_every_volume(self, peak):
+        assert audio_service._post_process(self._pcm(self._spoken(peak=peak))).size > 0
+
+    def test_single_word_survives(self):
+        audio = self._spoken("speech_word_16k.wav", peak=0.15)
         assert audio_service._post_process(self._pcm(audio)).size > 0
 
     def test_auto_gain_never_amplifies_room_tone(self):
-        rng = np.random.default_rng(1)
-        tone = rng.normal(0, 0.0015, self.RATE * 2)
-        # Would previously be normalised to 0.9 peak and handed to the engine.
-        assert audio_service._post_process(self._pcm(tone)).size == 0
+        # Auto-gain divides by the peak, so this was previously normalised to
+        # 0.9 and handed to the engine as a loud-looking signal.
+        assert audio_service._post_process(self._pcm(self._noise(2, seed=1))).size == 0
 
+    def test_speech_seconds_measures_only_speech(self):
+        assert speech_seconds(self._noise(3), self.RATE) == 0.0
+        assert speech_seconds(self._spoken(), self.RATE) > 1.0
+
+    # -- the filler fallback behind it ---------------------------------------
     @pytest.mark.parametrize("text", ["Okay.", "So", "so", "you", "Thank you.", "Bye!"])
     def test_known_fillers_detected(self, text):
         assert is_silence_hallucination(text)
@@ -254,17 +287,18 @@ class TestSilenceRejection:
         assert not is_silence_hallucination(text)
 
     def test_spoken_filler_is_kept_but_silent_one_is_dropped(self):
-        """The energy check is what makes the blocklist safe to apply."""
-        spoken = np.asarray(self._speech(0.6, 0.3), dtype=np.float32)
-        silent = np.asarray(np.random.default_rng(2).normal(0, 0.0015, self.RATE),
-                            dtype=np.float32)
+        """Speech duration, not loudness, is what makes the blocklist safe."""
+        spoken = self._spoken("speech_word_16k.wav", peak=0.15)
         assert pipeline._is_hallucination("Okay.", spoken) is False
-        assert pipeline._is_hallucination("Okay.", silent) is True
+        assert pipeline._is_hallucination("Thank you.", self._noise(3)) is True
+
+    def test_deliberate_one_word_clears_the_bound_with_margin(self):
+        spoken = self._spoken("speech_word_16k.wav", peak=0.15)
+        assert speech_seconds(spoken, self.RATE) > MIN_FILLER_SPEECH_S * 1.2
 
     def test_real_sentence_kept_even_when_quiet(self):
-        silent = np.asarray(np.random.default_rng(3).normal(0, 0.0015, self.RATE),
-                            dtype=np.float32)
-        assert pipeline._is_hallucination("Send the report to Dave", silent) is False
+        assert pipeline._is_hallucination(
+            "Send the report to Dave", self._spoken(peak=0.02)) is False
 
 
 # --------------------------------------------------------------------- hotkeys

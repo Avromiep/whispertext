@@ -11,7 +11,7 @@ import threading
 import time
 
 from backend.models.settings import load_settings
-from backend.services.audio_service import SILENCE_RMS, audio_service, peak_frame_rms
+from backend.services.audio_service import audio_service, speech_seconds
 from backend.services.event_bus import bus
 from backend.services.groq_whisper_service import (BACKUP_PROVIDER_ID, PROVIDER_ID,
                                                     groq_whisper_service)
@@ -24,6 +24,10 @@ from backend.utils.logger import get_logger
 from backend.utils.text import is_silence_hallucination
 
 log = get_logger(__name__)
+
+# A lone filler word is only discarded when less than this much speech was
+# found — short enough that any deliberate one-word dictation clears it.
+MIN_FILLER_SPEECH_S = 0.30
 
 
 class DictationPipeline:
@@ -166,19 +170,21 @@ class DictationPipeline:
 
     @staticmethod
     def _is_hallucination(text: str, audio) -> bool:
-        """Reject a lone filler word invented from audio too faint to be speech.
+        """Reject a lone filler word produced from a blip that wasn't speech.
 
-        Applies to every engine, including Groq, which reports no confidence
-        scores of its own. The energy check is what keeps this safe: an
-        intentional "Okay." is spoken well above the threshold and survives.
+        A last resort behind the VAD gate, for audio that clears the detector
+        on a cough or a door but contains no words. Gated on how much speech
+        was actually found, not loudness — on a noisy microphone the noise
+        floor and quiet speech sit at the same level. A spoken "Okay." runs
+        well past this bound and survives.
         """
         if not is_silence_hallucination(text):
             return False
-        loudest = peak_frame_rms(audio, load_settings().audio.sample_rate)
-        if loudest >= SILENCE_RMS * 2:
+        detected = speech_seconds(audio, load_settings().audio.sample_rate)
+        if detected >= MIN_FILLER_SPEECH_S:
             return False
-        log.info("Discarding likely hallucination %r (peak frame RMS %.4f)",
-                 text, loudest)
+        log.info("Discarding likely hallucination %r (%.2fs of speech detected)",
+                 text, detected)
         return True
 
     @staticmethod
