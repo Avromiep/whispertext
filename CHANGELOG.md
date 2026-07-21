@@ -3,6 +3,31 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.15] — 2026-07-21
+
+### Fixed
+- Holding the hotkey in a quiet room typed a stray word — usually "So" or
+  "Okay". Whisper was trained on captioned video and invents a filler
+  rather than returning nothing when handed silence, and the Groq engine
+  (unlike the local one) has no voice-activity filter in front of it.
+  Auto-gain made it far worse: it divides by the peak, so a near-silent
+  buffer was amplified up to 45x into a loud-looking signal before being
+  sent. Recordings with no speech in them are now discarded before they
+  reach any engine, auto-gain no longer boosts room tone, and a lone
+  filler word from audio too faint to contain speech is dropped. Speech
+  is unaffected at any volume — an intentional "Okay." still types.
+- The recording pill sometimes didn't appear on the hotkey even though
+  dictation still worked. The overlay is driven entirely by WebSocket
+  events, and three things could strand it: a socket left half-open by
+  sleep/resume stayed "open" but silent with no reconnect; a client that
+  reconnected mid-dictation was never told recording had already started;
+  and a burst of mic-level events could evict the state change from a
+  backed-up client's queue. The backend now heartbeats every 5s, replays
+  the current state to new subscribers, and never drops a state change in
+  favour of a mic level; the UI force-reconnects a socket that goes quiet.
+- The overlay window is recreated if its renderer crashes, instead of
+  staying invisible until the app restarts.
+
 ## [1.0.14] — 2026-07-14
 
 ### Changed

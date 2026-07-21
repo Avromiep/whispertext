@@ -24,12 +24,21 @@ class EventBus:
     def __init__(self) -> None:
         self._subscribers: set[asyncio.Queue[str]] = set()
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._last_status: str | None = None
 
     def attach_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
 
     def subscribe(self) -> asyncio.Queue[str]:
+        """New client queue, pre-seeded with the current status.
+
+        The overlay is driven entirely by status events, so a client that
+        connects (or reconnects) mid-dictation would otherwise sit blank until
+        the *next* state change — recording with no pill on screen.
+        """
         q: asyncio.Queue[str] = asyncio.Queue(maxsize=256)
+        if self._last_status is not None:
+            q.put_nowait(self._last_status)
         self._subscribers.add(q)
         return q
 
@@ -39,21 +48,28 @@ class EventBus:
     def publish(self, event_type: str, data: dict[str, Any] | None = None) -> None:
         """Thread-safe publish; callable from any worker thread."""
         payload = json.dumps({"type": event_type, "ts": time.time(), **(data or {})})
+        if event_type == "status":
+            self._last_status = payload
         loop = self._loop
         if loop is None or loop.is_closed():
             return
-        loop.call_soon_threadsafe(self._fanout, payload)
+        loop.call_soon_threadsafe(self._fanout, payload, event_type)
 
-    def _fanout(self, payload: str) -> None:
+    def _fanout(self, payload: str, event_type: str = "") -> None:
         for q in list(self._subscribers):
             try:
                 q.put_nowait(payload)
             except asyncio.QueueFull:
-                # Slow client: drop oldest to keep real-time feel.
+                # A backed-up client must never lose a state transition. Mic
+                # levels arrive ~33/s and are purely cosmetic, so drop those
+                # instead — both the incoming one and, to make room for a real
+                # event, whatever is already queued.
+                if event_type == "audio_level":
+                    continue
                 try:
                     q.get_nowait()
                     q.put_nowait(payload)
-                except asyncio.QueueEmpty:
+                except (asyncio.QueueEmpty, asyncio.QueueFull):
                     pass
 
     # Convenience helpers -----------------------------------------------------

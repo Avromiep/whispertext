@@ -11,7 +11,7 @@ import threading
 import time
 
 from backend.models.settings import load_settings
-from backend.services.audio_service import audio_service
+from backend.services.audio_service import SILENCE_RMS, audio_service, peak_frame_rms
 from backend.services.event_bus import bus
 from backend.services.groq_whisper_service import (BACKUP_PROVIDER_ID, PROVIDER_ID,
                                                     groq_whisper_service)
@@ -21,6 +21,7 @@ from backend.services.whisper_service import whisper_service
 from backend.storage.database import HistoryStore
 from backend.utils import encryption
 from backend.utils.logger import get_logger
+from backend.utils.text import is_silence_hallucination
 
 log = get_logger(__name__)
 
@@ -85,8 +86,9 @@ class DictationPipeline:
 
     def _finish_recording(self) -> None:
         audio = audio_service.stop()
-        if audio.size == 0:
+        if audio.size == 0:  # nothing captured, or the buffer held only silence
             bus.status("idle")
+            bus.notify("Didn't catch that — no speech detected.", "info")
             return
         # Process on a worker thread so the hook thread returns instantly.
         threading.Thread(target=self._process, args=(audio,), daemon=True).start()
@@ -101,7 +103,7 @@ class DictationPipeline:
             bus.status("transcribing")
             result = self._transcribe(audio)
             t_whisper = time.monotonic() - t0
-            if not result.text:
+            if not result.text or self._is_hallucination(result.text, audio):
                 bus.status("idle")
                 bus.notify("Didn't catch that — no speech detected.", "info")
                 return
@@ -161,6 +163,23 @@ class DictationPipeline:
                                provider_id, exc)
             bus.notify("Cloud transcription unavailable — used local instead.", "warning")
         return whisper_service.transcribe(audio)
+
+    @staticmethod
+    def _is_hallucination(text: str, audio) -> bool:
+        """Reject a lone filler word invented from audio too faint to be speech.
+
+        Applies to every engine, including Groq, which reports no confidence
+        scores of its own. The energy check is what keeps this safe: an
+        intentional "Okay." is spoken well above the threshold and survives.
+        """
+        if not is_silence_hallucination(text):
+            return False
+        loudest = peak_frame_rms(audio, load_settings().audio.sample_rate)
+        if loudest >= SILENCE_RMS * 2:
+            return False
+        log.info("Discarding likely hallucination %r (peak frame RMS %.4f)",
+                 text, loudest)
+        return True
 
     @staticmethod
     def _apply_formatting(text: str) -> str:

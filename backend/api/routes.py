@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
+import time
 import zipfile
 from pathlib import Path
 
@@ -273,14 +275,24 @@ async def export_logs() -> StreamingResponse:
 
 
 # -------------------------------------------------------------------- websocket
+HEARTBEAT_S = 5.0
+
+
 @router.websocket("/ws")
 async def websocket_events(ws: WebSocket) -> None:
     await ws.accept()
     q = bus.subscribe()
     try:
         while True:
-            await ws.send_text(await q.get())
-    except WebSocketDisconnect:
+            # A socket left half-open by sleep/resume stays readyState OPEN on
+            # the client without ever firing onclose, which silently strands the
+            # overlay. The steady heartbeat gives it something to watchdog.
+            try:
+                payload = await asyncio.wait_for(q.get(), timeout=HEARTBEAT_S)
+            except asyncio.TimeoutError:
+                payload = json.dumps({"type": "heartbeat", "ts": time.time()})
+            await ws.send_text(payload)
+    except (WebSocketDisconnect, RuntimeError, ConnectionError):
         pass
     finally:
         bus.unsubscribe(q)

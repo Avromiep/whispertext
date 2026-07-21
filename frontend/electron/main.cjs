@@ -89,6 +89,11 @@ function showSettings() {
   });
 }
 
+function ensureOverlay() {
+  if (!overlayWin || overlayWin.isDestroyed()) createOverlay();
+  return overlayWin;
+}
+
 function createOverlay() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   const W = 360, H = 120;
@@ -104,11 +109,27 @@ function createOverlay() {
   overlayWin.setIgnoreMouseEvents(true);
   overlayWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   overlayWin.loadURL(pageUrl("overlay.html"));
+  // A crashed or failed-to-load renderer leaves a live but blank window that
+  // never reacts to the hotkey again. Reload it instead of leaving it stranded.
+  overlayWin.webContents.on("render-process-gone", () => {
+    if (!quitting && overlayWin && !overlayWin.isDestroyed()) overlayWin.reload();
+  });
+  overlayWin.webContents.on("did-fail-load", () => {
+    if (!quitting && overlayWin && !overlayWin.isDestroyed()) {
+      setTimeout(() => overlayWin?.loadURL(pageUrl("overlay.html")), 1000);
+    }
+  });
 }
 
 // ------------------------------------------------------------------------ IPC
 ipcMain.on("overlay:show", () => {
-  if (overlayWin && !overlayWin.isDestroyed()) overlayWin.showInactive();
+  // Recreate on demand: a renderer crash would otherwise leave the overlay
+  // permanently invisible while dictation kept working in the background.
+  const win = ensureOverlay();
+  if (win && !win.isDestroyed()) {
+    win.showInactive();
+    win.setAlwaysOnTop(true, "screen-saver"); // reassert over fullscreen apps
+  }
 });
 ipcMain.on("overlay:hide", () => {
   if (overlayWin && !overlayWin.isDestroyed()) overlayWin.hide();

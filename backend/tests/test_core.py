@@ -8,12 +8,15 @@ import numpy as np
 import pytest
 
 from backend.models.settings import Settings
-from backend.services.audio_service import AudioService
+from backend.services.audio_service import (SILENCE_RMS, AudioService,
+                                            audio_service, peak_frame_rms)
 from backend.services.llm_service import (PROMPT_PRESETS, PROVIDER_CLASSES,
                                           LLMService)
+from backend.services.pipeline import pipeline
 from backend.storage.database import HistoryStore
 from backend.utils.retry import retry_async
 from backend.utils.hardware import recommend_local_models
+from backend.utils.text import is_silence_hallucination
 
 
 # ------------------------------------------------------------------- settings
@@ -196,6 +199,72 @@ class TestAudioProcessing:
     def test_trim_all_silence_returns_original(self):
         audio = np.zeros(16000, dtype=np.float32)
         assert AudioService._trim_silence(audio, 16000).size == audio.size
+
+
+# ------------------------------------------------------- silence hallucination
+class TestSilenceRejection:
+    """Whisper invents a filler word ("So", "Okay") when handed silence, so
+    silence must never reach an engine — least of all Groq, which has no VAD."""
+
+    RATE = 16000
+
+    @staticmethod
+    def _pcm(signal):
+        return (np.clip(signal, -1, 1) * 32767).astype(np.int16)
+
+    def _speech(self, seconds=1.5, amplitude=0.3):
+        t = np.linspace(0, seconds, int(self.RATE * seconds), endpoint=False)
+        wave = sum(np.sin(2 * np.pi * f * t) / (i + 1)
+                   for i, f in enumerate((150, 300, 450, 900)))
+        return (wave / 2.2) * amplitude
+
+    def test_peak_frame_rms_ignores_surrounding_silence(self):
+        quiet = np.zeros(self.RATE, dtype=np.float32)
+        burst = np.asarray(self._speech(0.2, 0.4), dtype=np.float32)
+        audio = np.concatenate([quiet, burst, quiet])
+        # A whole-buffer RMS would average the burst away; framewise must not.
+        assert peak_frame_rms(audio, self.RATE) > SILENCE_RMS * 4
+
+    def test_room_tone_is_discarded(self):
+        rng = np.random.default_rng(0)
+        tone = rng.normal(0, 0.0015, self.RATE * 3)
+        assert audio_service._post_process(self._pcm(tone)).size == 0
+
+    def test_digital_silence_is_discarded(self):
+        assert audio_service._post_process(self._pcm(np.zeros(self.RATE * 2))).size == 0
+
+    @pytest.mark.parametrize("amplitude", [0.03, 0.08, 0.35])
+    def test_speech_survives_at_every_volume(self, amplitude):
+        audio = self._speech(2.0, amplitude)
+        assert audio_service._post_process(self._pcm(audio)).size > 0
+
+    def test_auto_gain_never_amplifies_room_tone(self):
+        rng = np.random.default_rng(1)
+        tone = rng.normal(0, 0.0015, self.RATE * 2)
+        # Would previously be normalised to 0.9 peak and handed to the engine.
+        assert audio_service._post_process(self._pcm(tone)).size == 0
+
+    @pytest.mark.parametrize("text", ["Okay.", "So", "so", "you", "Thank you.", "Bye!"])
+    def test_known_fillers_detected(self, text):
+        assert is_silence_hallucination(text)
+
+    @pytest.mark.parametrize("text", ["Okay, let's ship it.", "So I went home",
+                                      "Send the report to Dave", "No thanks, I'm good"])
+    def test_real_sentences_are_not_fillers(self, text):
+        assert not is_silence_hallucination(text)
+
+    def test_spoken_filler_is_kept_but_silent_one_is_dropped(self):
+        """The energy check is what makes the blocklist safe to apply."""
+        spoken = np.asarray(self._speech(0.6, 0.3), dtype=np.float32)
+        silent = np.asarray(np.random.default_rng(2).normal(0, 0.0015, self.RATE),
+                            dtype=np.float32)
+        assert pipeline._is_hallucination("Okay.", spoken) is False
+        assert pipeline._is_hallucination("Okay.", silent) is True
+
+    def test_real_sentence_kept_even_when_quiet(self):
+        silent = np.asarray(np.random.default_rng(3).normal(0, 0.0015, self.RATE),
+                            dtype=np.float32)
+        assert pipeline._is_hallucination("Send the report to Dave", silent) is False
 
 
 # --------------------------------------------------------------------- hotkeys

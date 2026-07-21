@@ -19,6 +19,31 @@ log = get_logger(__name__)
 
 MAX_RECORD_SECONDS = 600  # hard safety cap for hands-free mode
 
+# Peak short-frame RMS below this means the buffer holds no speech at all —
+# only room tone. Deliberately well under even a quiet voice (which reaches
+# ~0.02+) so that real speech is never discarded; typical room tone is <0.003.
+SILENCE_RMS = 0.005
+# Auto-gain divides by the peak, so a near-silent buffer would be amplified up
+# to 45x — turning inaudible hiss into a loud signal for Whisper to hallucinate
+# words from. Never boost a buffer quieter than this.
+MIN_GAIN_PEAK = 0.02
+
+
+def peak_frame_rms(audio: np.ndarray, rate: int, frame_ms: int = 20) -> float:
+    """Loudest short-frame RMS in `audio`.
+
+    Framewise rather than whole-buffer so that a brief word surrounded by
+    silence still registers as speech instead of being averaged away.
+    """
+    if audio.size == 0:
+        return 0.0
+    frame = max(1, int(rate * frame_ms / 1000))
+    n_frames = audio.size // frame
+    if n_frames == 0:
+        return float(np.sqrt(np.mean(audio.astype(np.float32) ** 2)))
+    frames = audio[: n_frames * frame].astype(np.float32).reshape(n_frames, frame)
+    return float(np.max(np.sqrt(np.mean(frames ** 2, axis=1))))
+
 
 class AudioService:
     def __init__(self) -> None:
@@ -114,9 +139,17 @@ class AudioService:
         s = load_settings().audio
         audio = pcm.astype(np.float32) / 32768.0
 
+        # Measured before any gain: if nothing was actually said, hand back an
+        # empty buffer so no engine ever sees silence to invent words from.
+        loudest = peak_frame_rms(audio, s.sample_rate)
+        if audio.size and loudest < SILENCE_RMS:
+            log.info("Discarding silent recording (peak frame RMS %.4f < %.4f)",
+                     loudest, SILENCE_RMS)
+            return np.zeros(0, dtype=np.float32)
+
         if s.auto_gain and audio.size:
             peak = float(np.max(np.abs(audio)))
-            if 0 < peak < 0.5:  # boost quiet input, avoid amplifying clipping
+            if MIN_GAIN_PEAK < peak < 0.5:  # boost quiet speech, never room tone
                 audio = audio * (0.9 / peak)
         audio = np.clip(audio, -1.0, 1.0)
 

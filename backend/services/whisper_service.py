@@ -21,6 +21,9 @@ from backend.utils.text import strip_trailing_ellipsis
 
 log = get_logger(__name__)
 
+# Segments Whisper is more than this confident are silence are discarded.
+NO_SPEECH_MAX = 0.6
+
 
 @dataclass
 class TranscriptionResult:
@@ -95,11 +98,21 @@ class WhisperService:
         t0 = time.monotonic()
         segments, info = self._model.transcribe(
             audio, language=lang, beam_size=s.beam_size, vad_filter=True,
-            vad_parameters={"min_silence_duration_ms": 500},
+            vad_parameters={
+                "min_silence_duration_ms": 500,
+                # Drop sub-200 ms blips — a keyboard click or breath that trips
+                # the VAD is otherwise passed to Whisper, which answers with a
+                # filler word rather than nothing.
+                "min_speech_duration_ms": 200,
+            },
             # Independent utterances: skipping cross-segment conditioning is
             # faster and avoids repetition loops in noisy audio.
-            condition_on_previous_text=False)
-        text = strip_trailing_ellipsis(" ".join(seg.text.strip() for seg in segments).strip())
+            condition_on_previous_text=False,
+            no_speech_threshold=NO_SPEECH_MAX)
+        # Whisper reports its own confidence that a segment is silence; honour
+        # it explicitly rather than relying on the internal fallback heuristics.
+        kept = [seg for seg in segments if seg.no_speech_prob < NO_SPEECH_MAX]
+        text = strip_trailing_ellipsis(" ".join(seg.text.strip() for seg in kept).strip())
         elapsed = time.monotonic() - t0
 
         log.info("Transcribed %.1fs audio in %.2fs (%s): %r",
