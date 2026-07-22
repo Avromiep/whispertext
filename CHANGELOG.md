@@ -3,6 +3,24 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.17] — 2026-07-22
+
+### Added
+- Recent activity on the Home dashboard now has the same copy, favorite,
+  and delete controls as the History page (they appear on hover).
+
+### Changed
+- Hands-free dictation now ends on its own when you stop talking, instead
+  of recording until you double-tap again. It uses the same voice-activity
+  detection as the silence gate, so it also stops if you double-tap to
+  start but never actually speak — no more runaway recordings. The pause
+  length is adjustable, and auto-stop can be turned off (Hotkeys → Hands-
+  free) to keep the old double-tap-to-stop behaviour.
+
+### Fixed
+- Desktop notifications were attributed to "electron.app.Electron". They
+  now show "WhisperText" as the source.
+
 ## [1.0.16] — 2026-07-21
 
 ### Fixed

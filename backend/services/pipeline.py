@@ -70,12 +70,21 @@ class DictationPipeline:
         self._test_mode = enabled
 
     def toggle(self) -> None:
-        """Double-tap: start or stop hands-free recording."""
+        """Double-tap: start hands-free recording, or stop it if already going.
+
+        Stopping is also automatic once you go quiet (see the endpoint
+        monitor); the second double-tap is a manual override for either
+        ending early or when auto-stop is turned off."""
         with self._state_lock:
-            recording = audio_service.is_recording
-            if not recording:
+            if audio_service.is_recording:
+                if not self._hands_free:
+                    return  # a push-to-talk hold is in progress; leave it alone
+                self._hands_free = False  # claim the stop so the monitor bows out
+                stop = True
+            else:
                 self._hands_free = True
-        if recording:
+                stop = False
+        if stop:
             self._finish_recording()
         else:
             self._start_recording(hands_free=True)
@@ -84,9 +93,55 @@ class DictationPipeline:
     def _start_recording(self, hands_free: bool = False) -> None:
         try:
             audio_service.start()
-            bus.status("listening", hands_free=hands_free)
         except RuntimeError as exc:
             bus.error(str(exc), code="no_microphone")
+            return
+        bus.status("listening", hands_free=hands_free)
+        if hands_free and load_settings().hotkeys.hands_free_auto_stop:
+            threading.Thread(target=self._hands_free_endpoint, daemon=True,
+                             name="hands-free-endpoint").start()
+
+    def _hands_free_endpoint(self) -> None:
+        """End a hands-free dictation when the speaker stops talking.
+
+        Uses the same Silero VAD as the silence gate, run on a rolling
+        window, so it works even on a noisy microphone where a loudness
+        threshold could not tell speech from room tone. Also stops if the
+        user double-taps to launch but never speaks, instead of recording
+        forever."""
+        hk = load_settings().hotkeys
+        rate = load_settings().audio.sample_rate
+        silence_timeout = max(0.5, hk.hands_free_silence_ms / 1000)
+        # If they never speak, give up a bit after the trailing-silence bound.
+        no_speech_timeout = max(4.0, silence_timeout + 2.0)
+        window_s, poll_s = 1.2, 0.25
+
+        started = time.monotonic()
+        last_voice: float | None = None
+        while audio_service.is_recording and self._hands_free:
+            tail = audio_service.tail_audio(window_s)
+            voiced = tail.size > 0 and speech_seconds(tail, rate) >= 0.15
+            now = time.monotonic()
+            if voiced:
+                last_voice = now
+            elif last_voice is not None:
+                if now - last_voice >= silence_timeout:
+                    self._auto_finish("trailing silence")
+                    return
+            elif now - started >= no_speech_timeout:
+                self._auto_finish("no speech")
+                return
+            time.sleep(poll_s)
+
+    def _auto_finish(self, reason: str) -> None:
+        """Finish a hands-free recording from the endpoint monitor, unless a
+        manual double-tap already claimed the stop."""
+        with self._state_lock:
+            if not audio_service.is_recording or not self._hands_free:
+                return
+            self._hands_free = False
+        log.info("Hands-free auto-stop: %s", reason)
+        self._finish_recording()
 
     def _finish_recording(self) -> None:
         audio = audio_service.stop()

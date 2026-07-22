@@ -1,9 +1,10 @@
 /** Dictation history: search, favorites, copy, delete, export, privacy mode. */
 import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, Download, Search, Star, Trash2 } from "lucide-react";
+import { Download, Search, Trash2 } from "lucide-react";
 import { api, API_BASE, HistoryEntry, bridge } from "../lib/api";
 import { useSettings } from "../hooks/useSettings";
-import { Button, Card, PageHeader, Toggle, cn } from "../components/ui";
+import { Button, Card, PageHeader, Toggle } from "../components/ui";
+import HistoryActions from "../components/HistoryActions";
 
 const COLLAPSED_COUNT = 5;
 
@@ -14,7 +15,6 @@ export default function HistoryPage() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [showAll, setShowAll] = useState(false);
-  const [copiedId, setCopiedId] = useState<number | null>(null);
 
   const load = useCallback(() => {
     api.history(search).then(setEntries).catch(() => {});
@@ -35,14 +35,6 @@ export default function HistoryPage() {
     await api.clearHistory();
     setConfirmClear(false);
     load();
-  };
-
-  const copyEntry = async (h: HistoryEntry) => {
-    try {
-      await navigator.clipboard.writeText(h.final_text);
-      setCopiedId(h.id);
-      setTimeout(() => setCopiedId((id) => (id === h.id ? null : id)), 1500);
-    } catch { /* clipboard unavailable — silently ignore */ }
   };
 
   const visible = showAll ? entries : entries.slice(0, COLLAPSED_COUNT);
@@ -94,26 +86,7 @@ export default function HistoryPage() {
                       <span>{h.language}</span>
                     </div>
                   </div>
-                  <div className="flex gap-1 shrink-0">
-                    <button
-                      aria-label="Copy transcript"
-                      onClick={(e) => { e.stopPropagation(); copyEntry(h); }}
-                      className="p-1.5 rounded-lg hover:bg-elevated text-muted hover:text-fg">
-                      {copiedId === h.id ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                    </button>
-                    <button
-                      aria-label="Favorite"
-                      onClick={(e) => { e.stopPropagation(); api.favorite(h.id, !h.favorite).then(load); }}
-                      className={cn("p-1.5 rounded-lg hover:bg-elevated", h.favorite ? "text-amber-400" : "text-muted")}>
-                      <Star size={14} fill={h.favorite ? "currentColor" : "none"} />
-                    </button>
-                    <button
-                      aria-label="Delete entry"
-                      onClick={(e) => { e.stopPropagation(); api.deleteHistory(h.id).then(load); }}
-                      className="p-1.5 rounded-lg hover:bg-elevated text-muted hover:text-red-400">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
+                  <HistoryActions entry={h} onChange={load} />
                 </div>
                 {expanded === h.id && (
                   <div className="mt-3 pt-3 border-t border-border/50 animate-fade-in">

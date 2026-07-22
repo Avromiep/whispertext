@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 import wave
 from pathlib import Path
@@ -299,6 +300,104 @@ class TestSilenceRejection:
     def test_real_sentence_kept_even_when_quiet(self):
         assert pipeline._is_hallucination(
             "Send the report to Dave", self._spoken(peak=0.02)) is False
+
+
+# ------------------------------------------------------------------- hands-free
+class _ScriptedMic:
+    """A stand-in AudioService that plays back a scripted sequence of audio
+    blocks, so the hands-free endpoint monitor can be driven deterministically
+    without a real microphone."""
+
+    RATE = 16000
+
+    def __init__(self, segments):
+        # segments: list of (seconds, float32 source | None for room tone)
+        self._segments = segments
+        self._chunks: list[np.ndarray] = []
+        self._recording = False
+        self.finished = threading.Event()
+        rng = np.random.default_rng(0)
+        self._room = (rng.normal(0, 0.0113 / 3, self.RATE).astype(np.float32))
+
+    @property
+    def is_recording(self):
+        return self._recording
+
+    def start(self):
+        self._chunks = []
+        self._recording = True
+        threading.Thread(target=self._feed, daemon=True).start()
+
+    def _feed(self):
+        block = int(self.RATE * 0.03)
+        for seconds, src in self._segments:
+            for i in range(int(seconds / 0.03)):
+                if not self._recording:
+                    return
+                pool = self._room if src is None else src
+                off = (i * block) % max(1, pool.size - block)
+                chunk = (pool[off:off + block] * 32767).astype(np.int16)
+                self._chunks.append(chunk.reshape(-1, 1))
+                time.sleep(0.03)
+
+    def tail_audio(self, seconds):
+        from backend.services.audio_service import AudioService
+        return AudioService.tail_audio(self, seconds)
+
+    def stop(self):
+        self._recording = False
+        self.finished.set()
+        return np.zeros(0, dtype=np.float32)
+
+
+class TestHandsFree:
+    RATE = 16000
+    FIXTURES = Path(__file__).parent / "fixtures"
+
+    def _speech(self, peak=0.3):
+        with wave.open(str(self.FIXTURES / "speech_sentence_16k.wav"), "rb") as w:
+            pcm = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
+        a = pcm.astype(np.float32) / 32768.0
+        return a / max(float(np.max(np.abs(a))), 1e-9) * peak
+
+    def test_tail_audio_returns_recent_window(self):
+        from backend.services.audio_service import AudioService
+        svc = AudioService()
+        block = int(self.RATE * 0.03)
+        # 3 s of ascending ramps so we can tell early blocks from late ones.
+        svc._chunks = [np.full((block, 1), i, dtype=np.int16) for i in range(100)]
+        tail = svc.tail_audio(1.0)
+        assert abs(tail.size - self.RATE) <= block          # ~1 s, not all 3 s
+        assert tail[-1] > tail[0]                            # keeps the latest audio
+
+    @pytest.mark.parametrize("segments,lo,hi", [
+        # Speak ~2.6 s, then a 2 s pause (default silence_ms) -> stop shortly after.
+        ("speak_then_pause", 3.8, 6.5),
+        # Never speak -> the no-speech timeout (~4 s) ends it instead of forever.
+        ("never_speak", 3.5, 5.5),
+    ])
+    def test_auto_stops(self, segments, lo, hi, monkeypatch):
+        script = ([(2.6, self._speech()), (4.0, None)] if segments == "speak_then_pause"
+                  else [(8.0, None)])
+        mic = _ScriptedMic(script)
+        import backend.services.pipeline as pl
+        monkeypatch.setattr(pl, "audio_service", mic)
+
+        t0 = time.monotonic()
+        pl.pipeline.toggle()                 # begin hands-free
+        assert mic.finished.wait(timeout=12), "endpoint monitor never stopped"
+        elapsed = time.monotonic() - t0
+        assert lo <= elapsed <= hi, f"stopped at {elapsed:.1f}s, want {lo}-{hi}s"
+
+    def test_manual_double_tap_still_stops_immediately(self, monkeypatch):
+        mic = _ScriptedMic([(10.0, None)])
+        import backend.services.pipeline as pl
+        monkeypatch.setattr(pl, "audio_service", mic)
+        pl.pipeline.toggle()                 # start
+        time.sleep(0.5)
+        assert mic.is_recording
+        pl.pipeline.toggle()                 # manual stop
+        assert mic.finished.wait(timeout=2)
 
 
 # --------------------------------------------------------------------- hotkeys

@@ -17,7 +17,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export interface Settings {
   general: { theme: "dark" | "light" | "system"; launch_on_boot: boolean; notifications: boolean; telemetry: boolean; auto_update: boolean; debug_mode: boolean; onboarding_complete: boolean; font_scale: number };
-  hotkeys: { push_to_talk: string; toggle_key: string; double_tap_window_ms: number; open_settings: string; hands_free_enabled: boolean };
+  hotkeys: { push_to_talk: string; toggle_key: string; double_tap_window_ms: number; open_settings: string; hands_free_enabled: boolean; hands_free_auto_stop: boolean; hands_free_silence_ms: number };
   audio: { input_device: number | null; sample_rate: number; noise_suppression: boolean; auto_gain: boolean; silence_trimming: boolean; vad_enabled: boolean };
   whisper: { model: string; language: string; compute_device: string; beam_size: number; engine: "local" | "groq"; groq_model: string };
   ai: { enabled: boolean; mode: "cloud" | "local" | "hybrid"; provider: string; fallback_order: string[]; preset: string; custom_instructions: string; performance: "quality" | "balanced" | "speed"; minimize_costs: boolean; offline_only: boolean; streaming: boolean; retries: number; providers: Record<string, ProviderConfig> };

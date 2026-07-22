@@ -1,9 +1,10 @@
 /** Dashboard: live status cards, stats, and recent activity. */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Cpu, Gauge, Keyboard, Mic, Package, Sparkles, Wifi } from "lucide-react";
 import { api, AudioDevice, HistoryEntry, SystemInfo } from "../lib/api";
 import { useSettings } from "../hooks/useSettings";
 import { Badge, Card, Kbd, PageHeader } from "../components/ui";
+import HistoryActions from "../components/HistoryActions";
 import { PageId } from "../App";
 
 export default function HomePage({ go }: { go: (p: PageId) => void }) {
@@ -13,14 +14,18 @@ export default function HomePage({ go }: { go: (p: PageId) => void }) {
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [recent, setRecent] = useState<HistoryEntry[]>([]);
 
+  const loadRecent = useCallback(() => {
+    api.history().then((h) => setRecent(h.slice(0, 5))).catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (!backendUp) return;
     api.systemInfo().then(setInfo).catch(() => {});
     api.audioDevices().then(setDevices).catch(() => {});
-    api.history().then((h) => setRecent(h.slice(0, 5))).catch(() => {});
+    loadRecent();
     const t = setInterval(() => api.systemStats().then(setStats).catch(() => {}), 3000);
     return () => clearInterval(t);
-  }, [backendUp]);
+  }, [backendUp, loadRecent]);
 
   const mic = devices.find((d) => d.id === settings?.audio.input_device) ?? devices.find((d) => d.default);
 
@@ -78,11 +83,14 @@ export default function HomePage({ go }: { go: (p: PageId) => void }) {
             No dictations yet. Hold <Kbd>{settings?.hotkeys.push_to_talk ?? "Win+Shift"}</Kbd> and speak!
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-1">
             {recent.map((h) => (
-              <div key={h.id} className="flex items-center justify-between gap-4 py-1.5 border-b border-border/50 last:border-0">
-                <span className="text-sm truncate">{h.final_text}</span>
-                <span className="text-xs text-muted shrink-0">{new Date(h.ts * 1000).toLocaleTimeString()}</span>
+              <div key={h.id} className="group flex items-center justify-between gap-3 py-1.5 border-b border-border/50 last:border-0">
+                <span className="text-sm truncate flex-1">{h.final_text}</span>
+                <span className="text-xs text-muted shrink-0 tabular-nums">{new Date(h.ts * 1000).toLocaleTimeString()}</span>
+                <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                  <HistoryActions entry={h} onChange={loadRecent} size={13} />
+                </div>
               </div>
             ))}
           </div>

@@ -23,6 +23,11 @@ class HotkeySettings(BaseModel):
     double_tap_window_ms: int = 350
     open_settings: str = "ctrl+alt+w"
     hands_free_enabled: bool = True
+    # Hands-free ends itself when you stop talking, so there's no need to
+    # double-tap again. Off falls back to manual double-tap-to-stop only.
+    hands_free_auto_stop: bool = True
+    # Trailing silence (ms) after speech that ends a hands-free dictation.
+    hands_free_silence_ms: int = 2000
 
 
 class AudioSettings(BaseModel):

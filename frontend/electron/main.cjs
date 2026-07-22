@@ -19,6 +19,14 @@ let tray = null;
 let backendProc = null;
 let quitting = false;
 
+// Windows shows this as the source name on desktop notifications and groups
+// taskbar windows by it. Without it, renderer-fired Notifications are
+// attributed to "electron.app.Electron". Packaged builds must match the NSIS
+// shortcut's AppUserModelID (the electron-builder appId) so the shortcut's
+// "WhisperText" display name is used; unpackaged dev has no shortcut, so a
+// friendly literal is shown directly.
+app.setAppUserModelId(app.isPackaged ? "com.whispertext.app" : "WhisperText");
+
 // ---------------------------------------------------------------- single lock
 if (!app.requestSingleInstanceLock()) {
   app.quit();

@@ -112,6 +112,28 @@ class AudioService:
     def elapsed(self) -> float:
         return time.monotonic() - self._started_at if self._recording else 0.0
 
+    def tail_audio(self, seconds: float) -> np.ndarray:
+        """The last `seconds` of captured audio as float32 mono in [-1, 1].
+
+        Read-only snapshot for live endpointing while recording continues.
+        Returns fewer samples than requested early in a recording.
+        """
+        chunks = self._chunks[:]  # slice snapshots the list; callback only appends
+        if not chunks:
+            return np.zeros(0, dtype=np.float32)
+        need = int(seconds * load_settings().audio.sample_rate)
+        collected: list[np.ndarray] = []
+        total = 0
+        for c in reversed(chunks):
+            collected.append(c)
+            total += c.shape[0]
+            if total >= need:
+                break
+        pcm = np.concatenate(list(reversed(collected))).flatten()
+        if pcm.size > need:
+            pcm = pcm[-need:]
+        return pcm.astype(np.float32) / 32768.0
+
     def start(self) -> None:
         """Begin capture immediately. Raises RuntimeError if no mic available."""
         with self._lock:
