@@ -110,6 +110,7 @@ export default function App() {
     cleaning: { label: "AI Cleaning", cls: "bg-violet-500" },
     typing: { label: "Typing", cls: "bg-emerald-500" },
     done: { label: "Ready", cls: "bg-emerald-500" },
+    empty: { label: "Ready", cls: "bg-emerald-500" },
     error: { label: "Error", cls: "bg-red-500" },
   };
   const badge = STATUS_BADGE[status] ?? STATUS_BADGE.idle;

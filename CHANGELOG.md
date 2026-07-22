@@ -3,6 +3,13 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.18] — 2026-07-22
+
+### Changed
+- When no speech is detected, the "No speech detected" message now appears
+  briefly in the recording pill on screen, instead of as a desktop
+  notification sliding in from the corner.
+
 ## [1.0.17] — 2026-07-22
 
 ### Added

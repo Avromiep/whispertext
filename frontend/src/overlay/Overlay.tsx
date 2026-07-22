@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { useBackendEvents, WTEvent } from "../lib/ws";
 import { api, bridge } from "../lib/api";
 
-type OverlayState = "hidden" | "listening" | "transcribing" | "cleaning" | "typing" | "done" | "error";
+type OverlayState = "hidden" | "listening" | "transcribing" | "cleaning" | "typing" | "done" | "empty" | "error";
 
 const STATUS_LABEL: Record<string, string> = {
   transcribing: "Transcribing…",
@@ -77,6 +77,10 @@ export default function Overlay() {
       case "done":
         transition("done");
         hideTimer.current = setTimeout(() => transition("hidden"), 700);
+        break;
+      case "empty":
+        transition("empty");
+        hideTimer.current = setTimeout(() => transition("hidden"), 1800);
         break;
       default:
         transition("hidden");
@@ -175,6 +179,11 @@ export default function Overlay() {
           <>
             <span className="text-red-400 text-lg" role="img" aria-label="Error">🎤</span>
             <span className="text-sm text-red-300 truncate">{errorMsg}</span>
+          </>
+        ) : state === "empty" ? (
+          <>
+            <span className="text-muted text-lg opacity-70" role="img" aria-label="No speech">🎤</span>
+            <span className="text-sm text-muted">No speech detected</span>
           </>
         ) : (
           <>

@@ -146,8 +146,7 @@ class DictationPipeline:
     def _finish_recording(self) -> None:
         audio = audio_service.stop()
         if audio.size == 0:  # nothing captured, or the buffer held only silence
-            bus.status("idle")
-            bus.notify("Didn't catch that — no speech detected.", "info")
+            self._report_no_speech()
             return
         # Process on a worker thread so the hook thread returns instantly.
         threading.Thread(target=self._process, args=(audio,), daemon=True).start()
@@ -163,8 +162,7 @@ class DictationPipeline:
             result = self._transcribe(audio)
             t_whisper = time.monotonic() - t0
             if not result.text or self._is_hallucination(result.text, audio):
-                bus.status("idle")
-                bus.notify("Didn't catch that — no speech detected.", "info")
+                self._report_no_speech()
                 return
 
             if self._test_mode:
@@ -241,6 +239,13 @@ class DictationPipeline:
         log.info("Discarding likely hallucination %r (%.2fs of speech detected)",
                  text, detected)
         return True
+
+    @staticmethod
+    def _report_no_speech() -> None:
+        """Tell the overlay to flash a brief 'no speech' pill, rather than
+        firing a desktop notification that slides in from the screen corner.
+        The overlay shows it in place of the recording pill, then hides."""
+        bus.status("empty")
 
     @staticmethod
     def _apply_formatting(text: str) -> str:

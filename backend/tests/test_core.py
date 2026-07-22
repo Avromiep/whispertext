@@ -399,6 +399,17 @@ class TestHandsFree:
         pl.pipeline.toggle()                 # manual stop
         assert mic.finished.wait(timeout=2)
 
+    def test_no_speech_uses_overlay_pill_not_notification(self, monkeypatch):
+        """The 'no speech' feedback must ride the overlay status pill, not a
+        desktop notification that slides in from the screen corner."""
+        import backend.services.pipeline as pl
+        calls = []
+        monkeypatch.setattr(pl.bus, "status", lambda state, **k: calls.append(("status", state)))
+        monkeypatch.setattr(pl.bus, "notify", lambda *a, **k: calls.append(("notify", a)))
+        pl.pipeline._report_no_speech()
+        assert ("status", "empty") in calls
+        assert not any(c[0] == "notify" for c in calls)
+
 
 # --------------------------------------------------------------------- hotkeys
 class TestHotkeys:
