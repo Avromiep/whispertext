@@ -3,6 +3,13 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.19] — 2026-07-22
+
+### Changed
+- On the Home dashboard's recent activity, double-click a dictation to copy
+  it — it briefly shows "Copied" and reverts after a second. The separate
+  copy button there is gone (the full History page keeps its copy button).
+
 ## [1.0.18] — 2026-07-22
 
 ### Changed

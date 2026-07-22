@@ -13,9 +13,18 @@ export default function HomePage({ go }: { go: (p: PageId) => void }) {
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [recent, setRecent] = useState<HistoryEntry[]>([]);
+  const [copiedId, setCopiedId] = useState<number | null>(null);
 
   const loadRecent = useCallback(() => {
     api.history().then((h) => setRecent(h.slice(0, 5))).catch(() => {});
+  }, []);
+
+  const copyEntry = useCallback((h: HistoryEntry) => {
+    navigator.clipboard.writeText(h.final_text).then(() => {
+      window.getSelection()?.removeAllRanges(); // clear the double-click highlight
+      setCopiedId(h.id);
+      setTimeout(() => setCopiedId((id) => (id === h.id ? null : id)), 1000);
+    }).catch(() => { /* clipboard unavailable — silently ignore */ });
   }, []);
 
   useEffect(() => {
@@ -86,10 +95,19 @@ export default function HomePage({ go }: { go: (p: PageId) => void }) {
           <div className="space-y-1">
             {recent.map((h) => (
               <div key={h.id} className="group flex items-center justify-between gap-3 py-1.5 border-b border-border/50 last:border-0">
-                <span className="text-sm truncate flex-1">{h.final_text}</span>
-                <span className="text-xs text-muted shrink-0 tabular-nums">{new Date(h.ts * 1000).toLocaleTimeString()}</span>
+                <span
+                  className="text-sm truncate flex-1 cursor-pointer select-none"
+                  title="Double-click to copy"
+                  onDoubleClick={() => copyEntry(h)}>
+                  {h.final_text}
+                </span>
+                {copiedId === h.id ? (
+                  <span className="text-xs text-emerald-500 shrink-0 font-medium animate-fade-in">Copied</span>
+                ) : (
+                  <span className="text-xs text-muted shrink-0 tabular-nums">{new Date(h.ts * 1000).toLocaleTimeString()}</span>
+                )}
                 <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                  <HistoryActions entry={h} onChange={loadRecent} size={13} />
+                  <HistoryActions entry={h} onChange={loadRecent} size={13} showCopy={false} />
                 </div>
               </div>
             ))}

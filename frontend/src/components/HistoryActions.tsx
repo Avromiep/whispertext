@@ -5,10 +5,11 @@ import { Check, Copy, Star, Trash2 } from "lucide-react";
 import { api, HistoryEntry } from "../lib/api";
 import { cn } from "./ui";
 
-export default function HistoryActions({ entry, onChange, size = 14 }: {
+export default function HistoryActions({ entry, onChange, size = 14, showCopy = true }: {
   entry: HistoryEntry;
   onChange: () => void;      // reload after favorite/delete mutates the store
   size?: number;
+  showCopy?: boolean;        // Home hides this in favour of double-click-to-copy
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -24,12 +25,14 @@ export default function HistoryActions({ entry, onChange, size = 14 }: {
 
   return (
     <div className="flex gap-1 shrink-0">
-      <button
-        aria-label="Copy transcript"
-        onClick={(e) => { e.stopPropagation(); copy(); }}
-        className={cn(btn, "text-muted hover:text-fg")}>
-        {copied ? <Check size={size} className="text-emerald-400" /> : <Copy size={size} />}
-      </button>
+      {showCopy && (
+        <button
+          aria-label="Copy transcript"
+          onClick={(e) => { e.stopPropagation(); copy(); }}
+          className={cn(btn, "text-muted hover:text-fg")}>
+          {copied ? <Check size={size} className="text-emerald-400" /> : <Copy size={size} />}
+        </button>
+      )}
       <button
         aria-label={entry.favorite ? "Remove favorite" : "Favorite"}
         onClick={(e) => { e.stopPropagation(); api.favorite(entry.id, !entry.favorite).then(onChange); }}
