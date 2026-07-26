@@ -8,6 +8,7 @@ frontend/release/
 backend-dist/
 build/
 .pytest_cache/
+.dev/
 *.log
 .env
 Thumbs.db
