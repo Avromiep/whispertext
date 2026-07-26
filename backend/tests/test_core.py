@@ -19,7 +19,8 @@ from backend.services.pipeline import MIN_FILLER_SPEECH_S, pipeline
 from backend.storage.database import HistoryStore
 from backend.utils.retry import retry_async
 from backend.utils.hardware import recommend_local_models
-from backend.utils.text import is_silence_hallucination
+from backend.utils.text import (apply_vocabulary_casing, build_vocabulary_prompt,
+                                 is_silence_hallucination)
 
 
 # ------------------------------------------------------------------- settings
@@ -411,6 +412,45 @@ class TestHandsFree:
         assert not any(c[0] == "notify" for c in calls)
 
 
+# ------------------------------------------------------------------ vocabulary
+class TestVocabulary:
+    WORDS = ["GitHub", "OAuth", "kubectl", "New York", "C++"]
+
+    def test_prompt_joins_terms(self):
+        assert build_vocabulary_prompt(self.WORDS) == "GitHub, OAuth, kubectl, New York, C++"
+
+    def test_prompt_empty_is_none(self):
+        assert build_vocabulary_prompt([]) is None
+        assert build_vocabulary_prompt(["  ", ""]) is None
+
+    @pytest.mark.parametrize("text,expected", [
+        ("i pushed to github today", "i pushed to GitHub today"),
+        ("set up oauth for the app", "set up OAuth for the app"),
+        ("run Kubectl get pods", "run kubectl get pods"),   # wrong casing corrected
+        ("i love new york city", "i love New York city"),
+        ("learning c++ is fun", "learning C++ is fun"),
+        ("GITHUB is down", "GitHub is down"),
+    ])
+    def test_casing_enforced(self, text, expected):
+        assert apply_vocabulary_casing(text, self.WORDS) == expected
+
+    def test_possessive_and_punctuation(self):
+        assert apply_vocabulary_casing("github's api, then github.", ["GitHub"]) \
+            == "GitHub's api, then GitHub."
+
+    @pytest.mark.parametrize("text", ["yorkshire pudding", "scoauth", "githubbing"])
+    def test_no_substring_false_positives(self, text):
+        # A vocab term must not fire inside a longer word.
+        assert apply_vocabulary_casing(text, self.WORDS) == text
+
+    def test_longer_phrase_wins(self):
+        # "New York" should be applied whole, not leave a stray "York".
+        assert apply_vocabulary_casing("new york", ["York", "New York"]) == "New York"
+
+    def test_empty_vocabulary_is_noop(self):
+        assert apply_vocabulary_casing("nothing changes here", []) == "nothing changes here"
+
+
 # --------------------------------------------------------------------- hotkeys
 class TestHotkeys:
     def test_double_tap_detection(self, monkeypatch):
@@ -709,7 +749,7 @@ class TestPipelineTranscribeRouting:
         sentinel = object()
         used_keys = []
 
-        async def fake_transcribe(audio, language, model, api_key=None):
+        async def fake_transcribe(audio, language, model, api_key=None, prompt=None):
             used_keys.append(api_key)
             return sentinel
 
@@ -729,7 +769,7 @@ class TestPipelineTranscribeRouting:
         sentinel = object()
         used_keys = []
 
-        async def fake_transcribe(audio, language, model, api_key=None):
+        async def fake_transcribe(audio, language, model, api_key=None, prompt=None):
             used_keys.append(api_key)
             if api_key == "primary-key":
                 raise RuntimeError("429 rate limit")

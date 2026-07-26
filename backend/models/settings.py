@@ -103,6 +103,12 @@ class FormattingSettings(BaseModel):
     spoken_lists: bool = True                # "bullet point" -> "- "
 
 
+class VocabularySettings(BaseModel):
+    # Custom words/phrases: bias the speech model toward them, and force each
+    # to its exact spelling/casing in the output (e.g. "GitHub", "kubectl").
+    words: list[str] = Field(default_factory=list)
+
+
 class HistorySettings(BaseModel):
     enabled: bool = True
     retention_days: int = 30                 # 0 = keep forever
@@ -127,6 +133,7 @@ class Settings(BaseModel):
     ai: AISettings = Field(default_factory=AISettings)
     typing: TypingSettings = Field(default_factory=TypingSettings)
     formatting: FormattingSettings = Field(default_factory=FormattingSettings)
+    vocabulary: VocabularySettings = Field(default_factory=VocabularySettings)
     history: HistorySettings = Field(default_factory=HistorySettings)
 
 

@@ -17,7 +17,7 @@ from backend.models.settings import load_settings
 from backend.services.event_bus import bus
 from backend.utils.hardware import detect_hardware
 from backend.utils.logger import get_logger
-from backend.utils.text import strip_trailing_ellipsis
+from backend.utils.text import build_vocabulary_prompt, strip_trailing_ellipsis
 
 log = get_logger(__name__)
 
@@ -93,7 +93,8 @@ class WhisperService:
         self.load_model()
         assert self._model is not None
 
-        s = load_settings().whisper
+        cfg = load_settings()
+        s = cfg.whisper
         lang = None if s.language == "auto" else s.language
         t0 = time.monotonic()
         segments, info = self._model.transcribe(
@@ -105,6 +106,9 @@ class WhisperService:
                 # filler word rather than nothing.
                 "min_speech_duration_ms": 200,
             },
+            # Bias decoding toward the user's custom vocabulary (proper nouns,
+            # jargon) so those terms are transcribed rather than guessed at.
+            initial_prompt=build_vocabulary_prompt(cfg.vocabulary.words),
             # Independent utterances: skipping cross-segment conditioning is
             # faster and avoids repetition loops in noisy audio.
             condition_on_previous_text=False,

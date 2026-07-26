@@ -23,6 +23,7 @@ export interface Settings {
   ai: { enabled: boolean; mode: "cloud" | "local" | "hybrid"; provider: string; fallback_order: string[]; preset: string; custom_instructions: string; performance: "quality" | "balanced" | "speed"; minimize_costs: boolean; offline_only: boolean; streaming: boolean; retries: number; providers: Record<string, ProviderConfig> };
   typing: { method: string; chars_per_second: number; instant_paste_threshold: number; pre_type_delay_ms: number; restore_clipboard: boolean };
   formatting: { auto_capitalize: boolean; auto_punctuate: boolean; remove_fillers: boolean; smart_paragraphs: boolean; spoken_punctuation: boolean; spoken_lists: boolean };
+  vocabulary: { words: string[] };
   history: { enabled: boolean; retention_days: number };
 }
 

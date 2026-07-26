@@ -21,7 +21,8 @@ from backend.services.whisper_service import whisper_service
 from backend.storage.database import HistoryStore
 from backend.utils import encryption
 from backend.utils.logger import get_logger
-from backend.utils.text import is_silence_hallucination
+from backend.utils.text import (apply_vocabulary_casing, build_vocabulary_prompt,
+                                 is_silence_hallucination)
 
 log = get_logger(__name__)
 
@@ -174,6 +175,10 @@ class DictationPipeline:
             ai = self._run_async(llm_service.cleanup(result.text))
             t_ai = time.monotonic() - t0 - t_whisper
             final_text = self._apply_formatting(ai.text)
+            # Enforce the exact spelling/casing of vocabulary terms last, so
+            # neither AI cleanup nor auto-capitalize can re-case them.
+            final_text = apply_vocabulary_casing(
+                final_text, load_settings().vocabulary.words)
             if ai.error:
                 bus.notify("AI cleanup unavailable — inserted raw transcription.",
                            "warning")
@@ -205,15 +210,18 @@ class DictationPipeline:
         the free tier on the primary account is exhausted) before finally
         falling back to local Whisper — a dictation is never lost just
         because a cloud call failed."""
-        s = load_settings().whisper
+        cfg = load_settings()
+        s = cfg.whisper
         if s.engine == "groq":
+            prompt = build_vocabulary_prompt(cfg.vocabulary.words)
             for provider_id in (PROVIDER_ID, BACKUP_PROVIDER_ID):
                 key = encryption.get_api_key(provider_id)
                 if not key:
                     continue
                 try:
                     return self._run_async(groq_whisper_service.transcribe(
-                        audio, language=s.language, model=s.groq_model, api_key=key),
+                        audio, language=s.language, model=s.groq_model, api_key=key,
+                        prompt=prompt),
                         timeout_s=20.0)
                 except Exception as exc:
                     log.warning("Groq transcription failed via %s (%s); trying next",

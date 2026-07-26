@@ -3,6 +3,17 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.20] — 2026-07-22
+
+### Added
+- **Custom vocabulary** (Dictation → Vocabulary). Add your own words, names,
+  and jargon. They're fed to the speech engine as a recognition hint so they
+  transcribe more reliably, and — the part you asked for — each is typed with
+  the exact capitalization you enter. Add "GitHub" and a spoken "github"
+  comes out "GitHub"; "OAuth", "kubectl", "iPhone" all keep their casing.
+  Works on both the local and Groq engines, and applies after AI cleanup so
+  nothing re-cases the term.
+
 ## [1.0.19] — 2026-07-22
 
 ### Changed

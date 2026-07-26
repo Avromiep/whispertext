@@ -55,7 +55,8 @@ class GroqWhisperService:
 
     async def transcribe(self, audio: np.ndarray, *, language: str = "auto",
                          model: str = DEFAULT_MODEL,
-                         api_key: str | None = None) -> TranscriptionResult:
+                         api_key: str | None = None,
+                         prompt: str | None = None) -> TranscriptionResult:
         api_key = api_key or get_api_key(PROVIDER_ID)
         if not api_key:
             raise RuntimeError("No Groq API key configured")
@@ -67,6 +68,8 @@ class GroqWhisperService:
         data = {"model": model, "response_format": "json"}
         if language != "auto":
             data["language"] = language
+        if prompt:  # bias toward the user's custom vocabulary
+            data["prompt"] = prompt
         r = await self.client.post(
             API_URL,
             headers={"Authorization": f"Bearer {api_key}"},

@@ -1,12 +1,14 @@
 /** Dictation settings: formatting, typing behavior, language, cleanup toggles. */
 import { api, } from "../lib/api";
 import { useEffect, useState } from "react";
+import { Plus, X } from "lucide-react";
 import { useSettings } from "../hooks/useSettings";
-import { PageHeader, Section, Select, Slider, Toggle } from "../components/ui";
+import { Button, PageHeader, Section, Select, Slider, Toggle } from "../components/ui";
 
 export default function DictationPage() {
   const { settings, patch } = useSettings();
   const [languages, setLanguages] = useState<Record<string, string>>({ auto: "Auto-detect" });
+  const [vocabInput, setVocabInput] = useState("");
 
   useEffect(() => {
     api.systemInfo().then((i) => setLanguages(i.languages)).catch(() => {});
@@ -15,6 +17,18 @@ export default function DictationPage() {
   if (!settings) return null;
   const f = settings.formatting;
   const t = settings.typing;
+  const vocab = settings.vocabulary.words;
+
+  const addWord = () => {
+    const w = vocabInput.trim();
+    if (!w) return;
+    // Replace any existing case-variant so re-adding fixes the casing.
+    const without = vocab.filter((x) => x.toLowerCase() !== w.toLowerCase());
+    patch({ vocabulary: { words: [...without, w] } });
+    setVocabInput("");
+  };
+  const removeWord = (w: string) =>
+    patch({ vocabulary: { words: vocab.filter((x) => x !== w) } });
 
   return (
     <div className="animate-fade-in">
@@ -27,6 +41,39 @@ export default function DictationPage() {
           options={Object.entries(languages).map(([value, label]) => ({ value, label }))}
           label="Spoken language"
         />
+      </Section>
+
+      <Section title="Vocabulary"
+        description="Your own words, names, and jargon. They're recognized more reliably, and typed with the exact capitalization you enter here — e.g. GitHub, OAuth, kubectl.">
+        <div className="flex gap-2">
+          <input
+            value={vocabInput}
+            onChange={(e) => setVocabInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addWord(); } }}
+            placeholder="Add a word or phrase…"
+            aria-label="Add vocabulary word"
+            className="flex-1 h-9 rounded-xl bg-elevated border border-border px-3 text-sm placeholder:text-muted/60 focus:border-accent transition-colors"
+          />
+          <Button size="sm" onClick={addWord} disabled={!vocabInput.trim()}>
+            <Plus size={13} /> Add
+          </Button>
+        </div>
+        {vocab.length === 0 ? (
+          <p className="text-xs text-muted mt-3">No custom words yet.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2 mt-3">
+            {vocab.map((w) => (
+              <span key={w}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-elevated border border-border pl-2.5 pr-1.5 py-1 text-sm font-medium">
+                {w}
+                <button aria-label={`Remove ${w}`} onClick={() => removeWord(w)}
+                  className="text-muted hover:text-red-400 transition-colors">
+                  <X size={13} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
       </Section>
 
       <Section title="Cleanup & formatting" description="Applied by the AI cleanup stage.">
