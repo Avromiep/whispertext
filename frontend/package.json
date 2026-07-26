@@ -1,7 +1,7 @@
 {
   "name": "whispertext",
   "productName": "WhisperText",
-  "version": "1.0.21",
+  "version": "1.0.22",
   "description": "AI voice dictation for every application",
   "main": "electron/main.cjs",
   "type": "module",
@@ -11,6 +11,7 @@
     "dev:electron": "cross-env WT_DEV=1 electron .",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
+    "test:electron": "node electron/backend-supervisor.test.cjs",
     "start": "electron .",
     "dist": "vite build && electron-builder --win nsis --publish never"
   },

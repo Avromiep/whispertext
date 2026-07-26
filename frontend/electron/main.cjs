@@ -3,11 +3,13 @@
  * Owns: Python backend lifecycle, system tray, settings window, and the
  * transparent always-on-top recording overlay.
  */
-const { app, BrowserWindow, Tray, Menu, ipcMain, shell, nativeImage, screen } = require("electron");
+const { app, BrowserWindow, Tray, Menu, ipcMain, shell, nativeImage, screen, Notification } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const http = require("http");
+const net = require("net");
+const { planBackendRestart } = require("./backend-supervisor.cjs");
 
 const BACKEND_PORT = 43117;
 const DEV = !!process.env.WT_DEV;
@@ -35,40 +37,84 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 // ------------------------------------------------------------------- backend
-function backendAlive(cb) {
-  const req = http.get({ host: "127.0.0.1", port: BACKEND_PORT, path: "/health", timeout: 1500 },
-    (res) => cb(res.statusCode === 200));
-  req.on("error", () => cb(false));
-  req.on("timeout", () => { req.destroy(); cb(false); });
+// The backend owns port 43117. An earlier version respawned it on every
+// non-zero exit with no limit, and decided whether to spawn purely from a
+// /health probe. When the port was already held — a second instance, or a dev
+// server whose backend was still warming up (loading the Whisper model, so
+// /health hadn't come up yet) — Electron spawned a fresh backend every few
+// seconds forever, each one briefly installing and tearing down the global
+// keyboard hook. Now we never spawn while something is already listening on
+// the port (we adopt it), and cap consecutive failed restarts with backoff.
+// The restart decision itself lives in backend-supervisor.cjs (unit-tested).
+let backendRestarts = 0;
+let backendStartedAt = 0;
+
+// Anything listening on the port? A raw TCP connect is reliable even while the
+// backend is warming up, unlike a /health request that needs the app ready.
+function backendPortInUse(cb) {
+  const socket = net.connect({ host: "127.0.0.1", port: BACKEND_PORT });
+  let done = false;
+  const finish = (inUse) => { if (!done) { done = true; socket.destroy(); cb(inUse); } };
+  socket.setTimeout(1000);
+  socket.on("connect", () => finish(true));
+  socket.on("timeout", () => finish(false));
+  socket.on("error", () => finish(false)); // ECONNREFUSED = nothing there
+}
+
+function spawnBackend() {
+  let cmd, args, cwd;
+  if (DEV || !app.isPackaged) {
+    cwd = path.resolve(__dirname, "..", "..");
+    cmd = path.join(cwd, ".venv", "Scripts", "python.exe");
+    args = ["-m", "backend.app"];
+  } else {
+    cwd = path.join(process.resourcesPath, "backend");
+    cmd = path.join(cwd, "whispertext-backend.exe");
+    args = [];
+  }
+  if (!fs.existsSync(cmd)) {
+    console.error("Backend executable not found:", cmd);
+    return;
+  }
+  backendStartedAt = Date.now();
+  backendProc = spawn(cmd, args, { cwd, stdio: "ignore", windowsHide: true });
+  backendProc.on("exit", (code) => {
+    const ranMs = Date.now() - backendStartedAt;
+    backendProc = null;
+    backendPortInUse((portInUse) => {
+      const plan = planBackendRestart({ quitting, exitCode: code, ranMs,
+                                        restarts: backendRestarts, portInUse });
+      backendRestarts = plan.restarts;
+      if (plan.action === "retry") {
+        setTimeout(startBackend, plan.delayMs);
+      } else if (plan.action === "giveup") {
+        console.error("Backend keeps exiting without staying up; not retrying.");
+        notifyBackendDown();
+      }
+      // "adopt" / "none": leave the running backend (or shutdown) as-is.
+    });
+  });
 }
 
 function startBackend() {
-  backendAlive((alive) => {
-    if (alive) return; // already running (dev workflow or restart)
-    let cmd, args, cwd;
-    if (DEV || !app.isPackaged) {
-      cwd = path.resolve(__dirname, "..", "..");
-      cmd = path.join(cwd, ".venv", "Scripts", "python.exe");
-      args = ["-m", "backend.app"];
-    } else {
-      cwd = path.join(process.resourcesPath, "backend");
-      cmd = path.join(cwd, "whispertext-backend.exe");
-      args = [];
-    }
-    if (!fs.existsSync(cmd)) {
-      console.error("Backend executable not found:", cmd);
-      return;
-    }
-    backendProc = spawn(cmd, args, { cwd, stdio: "ignore", windowsHide: true });
-    backendProc.on("exit", (code) => {
-      backendProc = null;
-      if (!quitting && code !== 0) setTimeout(startBackend, 3000); // auto-restart
-    });
+  if (backendProc) return;               // already managing a backend
+  backendPortInUse((inUse) => {
+    if (inUse) return;                    // adopt whatever already owns the port
+    spawnBackend();
   });
 }
 
 function stopBackend() {
   if (backendProc) { backendProc.kill(); backendProc = null; }
+}
+
+function notifyBackendDown() {
+  try {
+    new Notification({
+      title: "WhisperText",
+      body: "The backend didn't start. Try restarting the app.",
+    }).show();
+  } catch { /* notifications unavailable */ }
 }
 
 // -------------------------------------------------------------------- windows

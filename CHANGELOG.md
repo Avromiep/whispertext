@@ -3,6 +3,17 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.22] — 2026-07-26
+
+### Fixed
+- The app no longer respawns the backend in a tight loop when its port is
+  already taken. It now adopts a backend that's already running instead of
+  launching a competing one, and caps restart attempts with a backing-off
+  delay (giving up with a notification if it truly can't start) rather than
+  relaunching forever. Each doomed relaunch used to re-install the global
+  keyboard hook every few seconds, which could disrupt hotkeys — and was the
+  underlying trigger for the settings/vocabulary loss fixed in 1.0.21.
+
 ## [1.0.21] — 2026-07-26
 
 ### Fixed
