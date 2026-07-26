@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import threading
 import time
 import wave
@@ -43,6 +44,29 @@ class TestSettings:
         # survives reload
         monkeypatch.setattr(ms, "_settings", None)
         assert ms.load_settings().ai.provider == "gemini"
+
+    def test_save_does_not_clobber_external_disk_write(self, tmp_path, monkeypatch):
+        """A save must merge onto the freshest file, not a stale in-memory
+        cache — the bug that wiped custom vocabulary when a second backend
+        process held older settings."""
+        import backend.models.settings as ms
+        monkeypatch.setattr(ms, "SETTINGS_FILE", tmp_path / "settings.json")
+        monkeypatch.setattr(ms, "_settings", None)
+        monkeypatch.setattr(ms, "_loaded_mtime", None)
+
+        # This process caches settings with an empty vocabulary.
+        assert ms.load_settings().vocabulary.words == []
+
+        # Another process writes vocabulary words straight to the file.
+        data = ms.Settings().model_dump()
+        data["vocabulary"]["words"] = ["GitHub", "OAuth"]
+        time.sleep(0.02)  # ensure a distinct mtime so the change is detected
+        (tmp_path / "settings.json").write_text(json.dumps(data), encoding="utf-8")
+
+        # A later, unrelated change from the stale-cache process must keep them.
+        updated = ms.update_settings({"general": {"theme": "dark"}})
+        assert updated.vocabulary.words == ["GitHub", "OAuth"]
+        assert updated.general.theme == "dark"
 
 
 # -------------------------------------------------------------------- history

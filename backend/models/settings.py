@@ -137,35 +137,52 @@ class Settings(BaseModel):
     history: HistorySettings = Field(default_factory=HistorySettings)
 
 
-_lock = threading.Lock()
+# Reentrant: update_settings holds the lock while calling load_settings.
+_lock = threading.RLock()
 _settings: Settings | None = None
+_loaded_mtime: float | None = None
+
+
+def _file_mtime() -> float | None:
+    try:
+        return SETTINGS_FILE.stat().st_mtime
+    except OSError:
+        return None
 
 
 def load_settings() -> Settings:
-    """Load settings from disk, tolerating missing or partially invalid files."""
-    global _settings
+    """Return current settings, re-reading the file if it changed on disk.
+
+    The cache is refreshed whenever the file's mtime differs from what we last
+    loaded, so a settings change written by another process (or a hand edit)
+    is picked up instead of being silently overwritten by a stale cache."""
+    global _settings, _loaded_mtime
     with _lock:
-        if _settings is None:
+        mtime = _file_mtime()
+        if _settings is None or mtime != _loaded_mtime:
             try:
                 _settings = Settings.model_validate(
                     json.loads(SETTINGS_FILE.read_text(encoding="utf-8")))
+                _loaded_mtime = mtime
             except (OSError, ValueError):
-                _settings = Settings()
-                _write(_settings)
+                if _settings is None:      # no readable file yet — seed defaults
+                    _settings = Settings()
+                    _write(_settings)
+                    _loaded_mtime = _file_mtime()
         return _settings
 
 
 def save_settings(new: Settings) -> Settings:
-    global _settings
+    global _settings, _loaded_mtime
     with _lock:
         _settings = new
         _write(new)
+        _loaded_mtime = _file_mtime()      # our own write is the current state
         return new
 
 
 def update_settings(patch: dict) -> Settings:
     """Deep-merge a partial dict into current settings and persist."""
-    current = load_settings().model_dump()
 
     def merge(dst: dict, src: dict) -> dict:
         for k, v in src.items():
@@ -175,7 +192,11 @@ def update_settings(patch: dict) -> Settings:
                 dst[k] = v
         return dst
 
-    return save_settings(Settings.model_validate(merge(current, patch)))
+    with _lock:
+        # Merge onto the freshest on-disk state (load_settings re-reads if the
+        # file changed), so a concurrent writer's changes are never clobbered.
+        current = load_settings().model_dump()
+        return save_settings(Settings.model_validate(merge(current, patch)))
 
 
 def _write(s: Settings) -> None:

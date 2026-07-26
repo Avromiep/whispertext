@@ -3,6 +3,16 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.21] — 2026-07-26
+
+### Fixed
+- Settings could be lost when more than one backend process was briefly
+  running (which the app's own backend auto-restart could cause): the older
+  process held a stale copy of your settings in memory and, on its next
+  save, overwrote newer changes on disk — most visibly your custom
+  vocabulary. Saves now re-read the current file and merge onto it, so a
+  stale process can no longer clobber newer settings.
+
 ## [1.0.20] — 2026-07-22
 
 ### Added
