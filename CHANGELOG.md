@@ -3,6 +3,13 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.26] — 2026-07-27
+
+### Changed
+- Vocabulary export now saves into a dedicated "WhisperText Vocabulary
+  Backup" folder inside Documents (created automatically), instead of
+  dropping the file directly in Documents. Import opens that folder too.
+
 ## [1.0.25] — 2026-07-27
 
 ### Added

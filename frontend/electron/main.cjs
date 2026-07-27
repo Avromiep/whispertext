@@ -200,14 +200,21 @@ ipcMain.on("app:open-external", (_e, url) => {
 });
 
 // ------------------------------------------------------------------ vocabulary
-// Export writes the word list to the user's Documents folder and reveals it in
-// Explorer; import opens a native file picker starting in Documents so the
-// exported file is easy to find. Both keep the file I/O in the main process.
+// Export writes the word list to a dedicated folder under Documents and reveals
+// it in Explorer; import opens a native file picker starting in that same
+// folder so the exported file is easy to find. File I/O stays in main.
 const VOCAB_FILENAME = "whispertext-vocabulary.txt";
+const VOCAB_BACKUP_DIR = "WhisperText Vocabulary Backup";   // under the user's Documents
+
+function vocabBackupDir() {
+  return path.join(app.getPath("documents"), VOCAB_BACKUP_DIR);
+}
 
 ipcMain.handle("vocabulary:export", (_e, words) => {
   try {
-    const file = path.join(app.getPath("documents"), VOCAB_FILENAME);
+    const dir = vocabBackupDir();
+    fs.mkdirSync(dir, { recursive: true });   // create the folder if needed
+    const file = path.join(dir, VOCAB_FILENAME);
     const list = Array.isArray(words) ? words.map((w) => String(w)) : [];
     fs.writeFileSync(file, list.join("\r\n") + (list.length ? "\r\n" : ""), "utf8");
     shell.showItemInFolder(file);   // reveal it so it's easy to find
@@ -218,10 +225,14 @@ ipcMain.handle("vocabulary:export", (_e, words) => {
 });
 
 ipcMain.handle("vocabulary:import", async () => {
+  // Start the picker in the backup folder if it exists, else Documents.
+  let defaultPath = vocabBackupDir();
+  try { if (!fs.existsSync(defaultPath)) defaultPath = app.getPath("documents"); }
+  catch { defaultPath = app.getPath("documents"); }
   const parent = settingsWin && !settingsWin.isDestroyed() ? settingsWin : undefined;
   const res = await dialog.showOpenDialog(parent, {
     title: "Import vocabulary",
-    defaultPath: app.getPath("documents"),   // open the Documents folder
+    defaultPath,
     filters: [{ name: "Vocabulary", extensions: ["txt", "json"] },
               { name: "All files", extensions: ["*"] }],
     properties: ["openFile"],
