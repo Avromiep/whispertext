@@ -45,6 +45,24 @@ class TestSettings:
         monkeypatch.setattr(ms, "_settings", None)
         assert ms.load_settings().ai.provider == "gemini"
 
+    def test_write_keeps_recoverable_backup(self, tmp_path, monkeypatch):
+        """Every save snapshots the previous file, so an accidental wipe (like
+        clearing the vocabulary) can be recovered from the backups folder."""
+        import backend.models.settings as ms
+        monkeypatch.setattr(ms, "SETTINGS_FILE", tmp_path / "settings.json")
+        monkeypatch.setattr(ms, "SETTINGS_BACKUP_DIR", tmp_path / "backups")
+        monkeypatch.setattr(ms, "_settings", None)
+        monkeypatch.setattr(ms, "_loaded_mtime", None)
+
+        ms.update_settings({"vocabulary": {"words": ["GitHub", "OAuth"]}})
+        ms.update_settings({"vocabulary": {"words": []}})    # accidental wipe
+
+        backups = sorted((tmp_path / "backups").glob("settings-*.json"))
+        assert backups, "no backup was written"
+        recovered = [json.loads(b.read_text(encoding="utf-8"))["vocabulary"]["words"]
+                     for b in backups]
+        assert ["GitHub", "OAuth"] in recovered   # the pre-wipe words survive
+
     def test_save_does_not_clobber_external_disk_write(self, tmp_path, monkeypatch):
         """A save must merge onto the freshest file, not a stale in-memory
         cache — the bug that wiped custom vocabulary when a second backend

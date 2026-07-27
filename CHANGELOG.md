@@ -3,6 +3,14 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.25] — 2026-07-27
+
+### Added
+- Settings are now backed up automatically. Before every save, the previous
+  settings file is snapshotted into %APPDATA%\WhisperText\backups\ (the last
+  30 kept), so an accidental change — a wiped vocabulary, a mistaken edit, a
+  misbehaving process — can always be recovered.
+
 ## [1.0.24] — 2026-07-27
 
 ### Added

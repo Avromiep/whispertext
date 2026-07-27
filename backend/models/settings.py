@@ -3,11 +3,19 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from backend.config import SETTINGS_FILE
+from backend.config import APP_DIR, SETTINGS_FILE
+
+# Keep a rolling history of recent settings files. Settings are tiny and rarely
+# written, so this is cheap insurance against an accidental change (a bad write,
+# a stale process, a mistaken edit) silently wiping user data like the custom
+# vocabulary — the previous version is always recoverable from here.
+SETTINGS_BACKUP_DIR = APP_DIR / "backups"
+SETTINGS_BACKUP_KEEP = 30
 
 Theme = Literal["dark", "light", "system"]
 AIMode = Literal["cloud", "local", "hybrid"]
@@ -200,6 +208,31 @@ def update_settings(patch: dict) -> Settings:
 
 
 def _write(s: Settings) -> None:
+    _backup_current()  # snapshot the existing file before we overwrite it
     tmp = SETTINGS_FILE.with_suffix(".json.tmp")
     tmp.write_text(s.model_dump_json(indent=2), encoding="utf-8")
     tmp.replace(SETTINGS_FILE)  # atomic on same volume
+
+
+def _backup_current() -> None:
+    """Copy the current settings file into the backups folder before it's
+    overwritten, keeping the most recent SETTINGS_BACKUP_KEEP versions. Best
+    effort: a backup failure must never block saving settings."""
+    try:
+        if not SETTINGS_FILE.exists():
+            return
+        current = SETTINGS_FILE.read_bytes()
+        SETTINGS_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        existing = sorted(SETTINGS_BACKUP_DIR.glob("settings-*.json"))
+        if existing and existing[-1].read_bytes() == current:
+            return  # unchanged since the last backup — nothing new to keep
+        dest = SETTINGS_BACKUP_DIR / f"settings-{time.strftime('%Y%m%d-%H%M%S')}.json"
+        n = 0
+        while dest.exists():  # avoid collisions within the same second
+            n += 1
+            dest = SETTINGS_BACKUP_DIR / f"settings-{time.strftime('%Y%m%d-%H%M%S')}-{n}.json"
+        dest.write_bytes(current)
+        for old in sorted(SETTINGS_BACKUP_DIR.glob("settings-*.json"))[:-SETTINGS_BACKUP_KEEP]:
+            old.unlink(missing_ok=True)
+    except OSError:
+        pass
