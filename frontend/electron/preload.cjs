@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld("whispertext", {
   checkUpdates: () => ipcRenderer.invoke("updates:check"),
   getUpdateState: () => ipcRenderer.invoke("updates:get-state"),
   installUpdate: () => ipcRenderer.send("updates:install"),
+  exportVocabulary: (words) => ipcRenderer.invoke("vocabulary:export", words),
+  importVocabulary: () => ipcRenderer.invoke("vocabulary:import"),
   onNavigate: (cb) => ipcRenderer.on("navigate", (_e, page) => cb(page)),
   onUpdateState: (cb) => ipcRenderer.on("update-state", (_e, state) => cb(state)),
 });

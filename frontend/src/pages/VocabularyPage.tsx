@@ -1,13 +1,39 @@
 /** Custom vocabulary: your own words that bias recognition and keep their casing. */
-import { useState } from "react";
-import { Plus, X } from "lucide-react";
+import { useRef, useState } from "react";
+import { Download, Plus, Upload, X } from "lucide-react";
+import { API_BASE, bridge } from "../lib/api";
 import { useSettings } from "../hooks/useSettings";
 import { Button, PageHeader, Section } from "../components/ui";
+
+/** Merge imported terms into the existing list: dedupe case-insensitively,
+ *  with the imported spelling winning so an import can also fix casing. */
+function mergeVocabulary(existing: string[], incoming: string[]): string[] {
+  const merged = [...existing];
+  for (const w of incoming) {
+    const i = merged.findIndex((x) => x.toLowerCase() === w.toLowerCase());
+    if (i >= 0) merged[i] = w; else merged.push(w);
+  }
+  return merged;
+}
+
+/** Accept either a JSON array / {words:[…]} or plain text, one term per line. */
+function parseVocabularyFile(text: string): string[] {
+  let raw: unknown = null;
+  try { raw = JSON.parse(text); } catch { /* not JSON — treat as line-delimited */ }
+  const items = Array.isArray(raw) ? raw
+    : Array.isArray((raw as { words?: unknown })?.words) ? (raw as { words: unknown[] }).words
+    : text.split(/\r?\n/);
+  return items.map((w) => String(w).trim()).filter(Boolean);
+}
 
 export default function VocabularyPage() {
   const { settings, patch } = useSettings();
   const [input, setInput] = useState("");
   const [confirmWord, setConfirmWord] = useState<string | null>(null);
+  const [statusMsg, setStatusMsg] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const flash = (msg: string) => { setStatusMsg(msg); setTimeout(() => setStatusMsg(""), 5000); };
 
   if (!settings) return null;
   const vocab = settings.vocabulary.words;
@@ -23,10 +49,68 @@ export default function VocabularyPage() {
   const removeWord = (w: string) =>
     patch({ vocabulary: { words: vocab.filter((x) => x !== w) } });
 
+  const applyImportedText = async (text: string) => {
+    const words = parseVocabularyFile(text);
+    if (words.length === 0) { flash("No words found in that file."); return; }
+    const existingLower = new Set(vocab.map((x) => x.toLowerCase()));
+    const added = words.filter((w) => !existingLower.has(w.toLowerCase())).length;
+    await patch({ vocabulary: { words: mergeVocabulary(vocab, words) } });
+    flash(`Imported ${words.length} word${words.length === 1 ? "" : "s"}`
+      + (added !== words.length ? ` (${added} new)` : "") + ".");
+  };
+
+  // Save the list to the Documents folder and reveal it (Electron); in plain
+  // browser dev, fall back to the backend download endpoint.
+  const exportVocab = async () => {
+    if (bridge?.exportVocabulary) {
+      const res = await bridge.exportVocabulary(vocab);
+      flash(res?.ok ? `Exported to ${res.path}` : "Couldn't export the vocabulary.");
+    } else {
+      window.open(`${API_BASE}/vocabulary/export`);
+    }
+  };
+
+  // Open a native picker starting in Documents (Electron); browser dev uses the
+  // hidden <input type=file> instead.
+  const importVocab = async () => {
+    if (bridge?.importVocabulary) {
+      const res = await bridge.importVocabulary();
+      if (res?.canceled) return;
+      if (res?.ok && typeof res.text === "string") await applyImportedText(res.text);
+      else flash("Couldn't read that file.");
+    } else {
+      fileRef.current?.click();
+    }
+  };
+
+  const onImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";                     // let the same file be re-imported
+    if (file) await applyImportedText(await file.text());
+  };
+
   return (
     <div className="animate-fade-in">
       <PageHeader title="Vocabulary"
-        subtitle="Your own words, names, and jargon — recognized more reliably, and typed with the exact capitalization you enter." />
+        subtitle="Your own words, names, and jargon — recognized more reliably, and typed with the exact capitalization you enter."
+        actions={
+          <div className="flex gap-2">
+            <input ref={fileRef} type="file" accept=".txt,.json,text/plain,application/json"
+              className="hidden" onChange={onImportFile} />
+            <Button size="sm" onClick={importVocab}>
+              <Upload size={13} /> Import
+            </Button>
+            <Button size="sm" onClick={exportVocab} disabled={vocab.length === 0}>
+              <Download size={13} /> Export
+            </Button>
+          </div>
+        } />
+
+      {statusMsg && (
+        <div className="mb-4 text-xs text-muted bg-elevated border border-border rounded-xl px-3 py-2 animate-fade-in break-all">
+          {statusMsg}
+        </div>
+      )}
 
       <Section title="Your words"
         description="Add a term and press Enter. Whatever capitalization you type is how it'll be typed out — e.g. GitHub, OAuth, kubectl, iPhone.">

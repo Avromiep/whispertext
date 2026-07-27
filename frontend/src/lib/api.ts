@@ -85,6 +85,8 @@ export interface WTBridge {
   checkUpdates(): Promise<UpdateState>;
   getUpdateState(): Promise<UpdateState>;
   installUpdate(): void;
+  exportVocabulary(words: string[]): Promise<{ ok: boolean; path?: string; error?: string }>;
+  importVocabulary(): Promise<{ ok?: boolean; canceled?: boolean; text?: string; path?: string; error?: string }>;
   onNavigate(cb: (page: string) => void): void;
   onUpdateState(cb: (state: UpdateState) => void): void;
 }

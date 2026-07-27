@@ -3,6 +3,16 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.24] — 2026-07-27
+
+### Added
+- Export and import your vocabulary (buttons on the Vocabulary page).
+  Export saves the word list to your Documents folder as
+  whispertext-vocabulary.txt and reveals it in Explorer. Import opens a
+  file picker starting in Documents, and merges the file's words into your
+  list (accepts one-per-line text or a JSON array). A handy way to back up
+  or move your vocabulary between machines.
+
 ## [1.0.23] — 2026-07-26
 
 ### Changed

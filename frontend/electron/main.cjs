@@ -3,7 +3,7 @@
  * Owns: Python backend lifecycle, system tray, settings window, and the
  * transparent always-on-top recording overlay.
  */
-const { app, BrowserWindow, Tray, Menu, ipcMain, shell, nativeImage, screen, Notification } = require("electron");
+const { app, BrowserWindow, Tray, Menu, ipcMain, shell, nativeImage, screen, Notification, dialog } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
@@ -197,6 +197,41 @@ ipcMain.handle("app:set-login-item", (_e, enabled) => {
 ipcMain.on("app:restart", () => { quitting = true; stopBackend(); app.relaunch(); app.exit(0); });
 ipcMain.on("app:open-external", (_e, url) => {
   if (/^https?:\/\//.test(url)) shell.openExternal(url);
+});
+
+// ------------------------------------------------------------------ vocabulary
+// Export writes the word list to the user's Documents folder and reveals it in
+// Explorer; import opens a native file picker starting in Documents so the
+// exported file is easy to find. Both keep the file I/O in the main process.
+const VOCAB_FILENAME = "whispertext-vocabulary.txt";
+
+ipcMain.handle("vocabulary:export", (_e, words) => {
+  try {
+    const file = path.join(app.getPath("documents"), VOCAB_FILENAME);
+    const list = Array.isArray(words) ? words.map((w) => String(w)) : [];
+    fs.writeFileSync(file, list.join("\r\n") + (list.length ? "\r\n" : ""), "utf8");
+    shell.showItemInFolder(file);   // reveal it so it's easy to find
+    return { ok: true, path: file };
+  } catch (e) {
+    return { ok: false, error: String(e && e.message ? e.message : e) };
+  }
+});
+
+ipcMain.handle("vocabulary:import", async () => {
+  const parent = settingsWin && !settingsWin.isDestroyed() ? settingsWin : undefined;
+  const res = await dialog.showOpenDialog(parent, {
+    title: "Import vocabulary",
+    defaultPath: app.getPath("documents"),   // open the Documents folder
+    filters: [{ name: "Vocabulary", extensions: ["txt", "json"] },
+              { name: "All files", extensions: ["*"] }],
+    properties: ["openFile"],
+  });
+  if (res.canceled || !res.filePaths[0]) return { canceled: true };
+  try {
+    return { ok: true, text: fs.readFileSync(res.filePaths[0], "utf8"), path: res.filePaths[0] };
+  } catch (e) {
+    return { ok: false, error: String(e && e.message ? e.message : e) };
+  }
 });
 // --------------------------------------------------------------------- updates
 // The whole flow lives in-app: check → download (progress streamed to the

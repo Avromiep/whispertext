@@ -225,6 +225,17 @@ async def export_history() -> StreamingResponse:
                                       "attachment; filename=whispertext-history.csv"})
 
 
+@router.get("/vocabulary/export")
+async def export_vocabulary() -> StreamingResponse:
+    """The vocabulary as a plain-text file, one term per line — easy to back
+    up, hand-edit, or move to another machine. Imported back on the client."""
+    words = load_settings().vocabulary.words
+    body = "".join(f"{w}\n" for w in words)
+    return StreamingResponse(iter([body]), media_type="text/plain",
+                             headers={"Content-Disposition":
+                                      "attachment; filename=whispertext-vocabulary.txt"})
+
+
 # ------------------------------------------------------------- groq transcribe
 @router.post("/transcription/groq/validate")
 async def validate_groq() -> dict:
