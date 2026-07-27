@@ -3,6 +3,14 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.23] — 2026-07-26
+
+### Changed
+- Vocabulary is now its own section in the sidebar (between Dictation and
+  AI), instead of living inside the Dictation page.
+- Removing a vocabulary word now asks for confirmation (Yes / No) first, so
+  you can't delete one by accident.
+
 ## [1.0.22] — 2026-07-26
 
 ### Fixed

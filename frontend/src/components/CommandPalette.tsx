@@ -19,7 +19,7 @@ export default function CommandPalette({ open, onClose, go, notify }: {
 
   const actions = useMemo<Action[]>(() => {
     const nav: Action[] = (
-      ["home", "dictation", "ai", "audio", "hotkeys", "history", "models", "advanced", "about"] as PageId[]
+      ["home", "dictation", "vocabulary", "ai", "audio", "hotkeys", "history", "models", "advanced", "about"] as PageId[]
     ).map((p) => ({ id: `go-${p}`, label: `Go to ${p[0].toUpperCase()}${p.slice(1)}`, hint: "Navigate", run: () => go(p) }));
     return [
       { id: "start", label: "Start / Stop Dictation", hint: "Recording", run: () => void api.dictationToggle() },

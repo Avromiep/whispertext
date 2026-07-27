@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  Home, Mic, Sparkles, Volume2, Keyboard, HistoryIcon, Package, Wrench, Info,
+  Home, Mic, BookOpen, Sparkles, Volume2, Keyboard, HistoryIcon, Package, Wrench, Info,
 } from "lucide-react";
 import { SettingsContext, useSettingsProvider } from "./hooks/useSettings";
 import { useBackendEvents, WTEvent } from "./lib/ws";
@@ -10,6 +10,7 @@ import CommandPalette from "./components/CommandPalette";
 import Onboarding from "./pages/Onboarding";
 import HomePage from "./pages/HomePage";
 import DictationPage from "./pages/DictationPage";
+import VocabularyPage from "./pages/VocabularyPage";
 import AIPage from "./pages/AIPage";
 import AudioPage from "./pages/AudioPage";
 import HotkeysPage from "./pages/HotkeysPage";
@@ -19,12 +20,13 @@ import AdvancedPage from "./pages/AdvancedPage";
 import AboutPage from "./pages/AboutPage";
 
 export type PageId =
-  | "home" | "dictation" | "ai" | "audio" | "hotkeys"
+  | "home" | "dictation" | "vocabulary" | "ai" | "audio" | "hotkeys"
   | "history" | "models" | "advanced" | "about";
 
 const NAV: { id: PageId; label: string; icon: typeof Home }[] = [
   { id: "home", label: "Home", icon: Home },
   { id: "dictation", label: "Dictation", icon: Mic },
+  { id: "vocabulary", label: "Vocabulary", icon: BookOpen },
   { id: "ai", label: "AI", icon: Sparkles },
   { id: "audio", label: "Audio", icon: Volume2 },
   { id: "hotkeys", label: "Hotkeys", icon: Keyboard },
@@ -133,7 +135,7 @@ export default function App() {
                   "wt-wiggle-area w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors duration-150",
                   page === id ? "bg-elevated text-fg font-medium" : "text-muted hover:text-fg hover:bg-elevated/50",
                 )}
-                title={`Ctrl+${i + 1}`}
+                title={i < 9 ? `Ctrl+${i + 1}` : undefined}
               >
                 <Icon size={15} /> <WiggleText>{label}</WiggleText>
               </button>
@@ -150,6 +152,7 @@ export default function App() {
           <div className="max-w-3xl mx-auto px-8 py-8" key={page}>
             {page === "home" && <HomePage go={setPage} />}
             {page === "dictation" && <DictationPage />}
+            {page === "vocabulary" && <VocabularyPage />}
             {page === "ai" && <AIPage />}
             {page === "audio" && <AudioPage />}
             {page === "hotkeys" && <HotkeysPage />}
