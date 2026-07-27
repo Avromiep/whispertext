@@ -339,7 +339,23 @@ function createTray() {
 }
 
 // ----------------------------------------------------------------------- boot
+// Re-assert the Windows "launch on boot" entry from the saved setting, using
+// the CURRENT executable path, so an update that moved or replaced the binary
+// (or an app-identity change) can't leave a stale/undetected startup entry.
+// Packaged only — we never register the dev build to launch on boot.
+function reconcileLoginItem() {
+  if (!app.isPackaged) return;
+  try {
+    const settingsPath = path.join(app.getPath("appData"), "WhisperText", "settings.json");
+    if (!fs.existsSync(settingsPath)) return;
+    const saved = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+    const want = !!(saved.general && saved.general.launch_on_boot);
+    app.setLoginItemSettings({ openAtLogin: want, path: process.execPath });
+  } catch { /* best effort — never block startup */ }
+}
+
 app.whenReady().then(() => {
+  reconcileLoginItem();
   startBackend();
   createOverlay();
   createTray();

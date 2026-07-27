@@ -1,23 +1,23 @@
 /** Advanced: appearance, startup, debug, telemetry, whisper tuning, logs. */
 import { FileDown } from "lucide-react";
 import { api, API_BASE, bridge } from "../lib/api";
-import { useEffect, useState } from "react";
 import { useSettings } from "../hooks/useSettings";
 import { Button, PageHeader, Section, Select, Slider, Toggle } from "../components/ui";
 
 export default function AdvancedPage() {
   const { settings, patch } = useSettings();
-  const [loginItem, setLoginItem] = useState(false);
-
-  useEffect(() => { bridge?.getLoginItem().then(setLoginItem); }, []);
 
   if (!settings) return null;
   const g = settings.general;
 
+  // The saved setting is the source of truth; the OS startup entry is a side
+  // effect kept in sync with it (also re-asserted at every app launch in the
+  // main process, so an update that changed the exe path can't silently break
+  // it). Reading the live OS state for display made the toggle read "off"
+  // whenever that entry drifted — e.g. after the app-identity change.
   const setBoot = async (v: boolean) => {
     await patch({ general: { launch_on_boot: v } });
-    if (bridge) setLoginItem(await bridge.setLoginItem(v));
-    else setLoginItem(v);
+    bridge?.setLoginItem(v);
   };
 
   return (
@@ -39,7 +39,7 @@ export default function AdvancedPage() {
 
       <Section title="Startup & updates">
         <Toggle label="Launch on boot" description="Start WhisperText when you sign in"
-          checked={g.launch_on_boot && loginItem} onChange={setBoot} />
+          checked={g.launch_on_boot} onChange={setBoot} />
         <Toggle label="Automatic updates" description="Download updates in the background"
           checked={g.auto_update} onChange={(v) => patch({ general: { auto_update: v } })} />
         <Toggle label="Desktop notifications" description="Dictation complete, model downloads, errors"

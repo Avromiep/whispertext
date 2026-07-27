@@ -3,6 +3,17 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.27] — 2026-07-27
+
+### Fixed
+- "Launch on boot" could show as off even when you'd turned it on. The toggle
+  was reading the live Windows startup entry, which stops matching after an
+  app update (the executable path changes) — so a saved "on" looked "off".
+  The toggle now reflects your saved setting, and the app re-registers the
+  Windows startup entry with the current path on every launch, so it keeps
+  working across updates. (Your other settings weren't affected — they live in
+  the settings file and persist normally.)
+
 ## [1.0.26] — 2026-07-27
 
 ### Changed
