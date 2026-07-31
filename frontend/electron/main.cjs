@@ -257,13 +257,22 @@ function setUpdateState(next) {
   }
 }
 
+let pendingDownload = false;   // true when the user pressed "Update" (vs a passive check)
+
 function getUpdater() {
   if (updaterInstance) return updaterInstance;
   const { autoUpdater } = require("electron-updater");
-  autoUpdater.autoDownload = true;
+  autoUpdater.autoDownload = false;   // download only when the user asks
   autoUpdater.on("checking-for-update", () => setUpdateState({ state: "checking" }));
-  autoUpdater.on("update-available", (info) =>
-    setUpdateState({ state: "downloading", version: info.version, percent: 0 }));
+  autoUpdater.on("update-available", (info) => {
+    if (pendingDownload) {
+      setUpdateState({ state: "downloading", version: info.version, percent: 0 });
+      autoUpdater.downloadUpdate().catch((e) =>
+        setUpdateState({ state: "error", message: String(e?.message || e).split("\n")[0] }));
+    } else {
+      setUpdateState({ state: "available", version: info.version });  // just inform
+    }
+  });
   autoUpdater.on("update-not-available", () => setUpdateState({ state: "up-to-date" }));
   autoUpdater.on("download-progress", (p) => setUpdateState({
     state: "downloading", version: updateState.version,
@@ -280,19 +289,29 @@ function getUpdater() {
   return autoUpdater;
 }
 
-function checkForUpdates() {
+// download=false: a passive check (startup / tray) that only learns whether an
+// update exists. download=true: the "Update" button — check, then download and
+// stage the install if one is found.
+function checkForUpdates(download = false) {
   if (!app.isPackaged) return;
+  pendingDownload = download;
   try { getUpdater().checkForUpdates().catch(() => {}); } catch { /* updater unavailable */ }
 }
 
-ipcMain.handle("updates:check", () => { checkForUpdates(); return updateState; });
+ipcMain.handle("updates:check", () => { checkForUpdates(false); return updateState; });
+ipcMain.handle("updates:start", () => { checkForUpdates(true); return updateState; });
 ipcMain.handle("updates:get-state", () => updateState);
 ipcMain.on("updates:install", () => {
   if (!app.isPackaged || updateState.state !== "ready") return;
   try {
     quitting = true;
     stopBackend();
-    getUpdater().quitAndInstall(true, true); // silent install, relaunch when done
+    // quitAndInstall(isSilent=true, isForceRunAfter=true): quit the app, run the
+    // NSIS installer silently to replace files while the app is closed, then
+    // relaunch the new version. This is electron-updater's built-in equivalent
+    // of a detached "restart helper" — it handles the "can't overwrite a running
+    // app" problem for us, so no separate helper process is needed.
+    getUpdater().quitAndInstall(true, true);
   } catch { /* keep running; the renderer still shows the ready state */ }
 });
 

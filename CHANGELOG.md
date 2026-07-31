@@ -3,6 +3,17 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.28] — 2026-07-27
+
+### Changed
+- The update flow on the About page is now a single guided "Update" button:
+  it checks for a newer version, and if you're current it says so in a dialog
+  and stops. If an update exists it downloads with a live progress bar, then
+  shows an "Update ready — WhisperText will restart to finish installing"
+  dialog; clicking OK installs it silently and relaunches the new version.
+  (Downloading no longer starts on its own in the background — it happens when
+  you click Update.)
+
 ## [1.0.27] — 2026-07-27
 
 ### Fixed

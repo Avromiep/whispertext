@@ -68,7 +68,7 @@ export const api = {
 /** Auto-update progress as reported by the Electron main process.
  * "dev" means unpackaged builds, where the auto-updater is unavailable. */
 export interface UpdateState {
-  state: "idle" | "checking" | "downloading" | "ready" | "up-to-date" | "error" | "dev";
+  state: "idle" | "checking" | "available" | "downloading" | "ready" | "up-to-date" | "error" | "dev";
   version?: string;
   percent?: number;
   transferred?: number;
@@ -83,6 +83,7 @@ export interface WTBridge {
   openExternal(url: string): void; restart(): void;
   getLoginItem(): Promise<boolean>; setLoginItem(v: boolean): Promise<boolean>;
   checkUpdates(): Promise<UpdateState>;
+  startUpdate(): Promise<UpdateState>;
   getUpdateState(): Promise<UpdateState>;
   installUpdate(): void;
   exportVocabulary(words: string[]): Promise<{ ok: boolean; path?: string; error?: string }>;

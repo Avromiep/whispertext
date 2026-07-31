@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld("whispertext", {
   getLoginItem: () => ipcRenderer.invoke("app:get-login-item"),
   setLoginItem: (v) => ipcRenderer.invoke("app:set-login-item", v),
   checkUpdates: () => ipcRenderer.invoke("updates:check"),
+  startUpdate: () => ipcRenderer.invoke("updates:start"),
   getUpdateState: () => ipcRenderer.invoke("updates:get-state"),
   installUpdate: () => ipcRenderer.send("updates:install"),
   exportVocabulary: (words) => ipcRenderer.invoke("vocabulary:export", words),
