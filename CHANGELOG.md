@@ -3,6 +3,17 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.29] — 2026-08-05
+
+### Added
+- Microphone drop detection. When the mic delivers much less audio than the
+  hotkey was held for — meaning it glitched or another app grabbed it, and the
+  dictation is cut off — WhisperText now warns you ("your mic dropped ~Ns of
+  audio, the text may be cut off") instead of silently typing a half-sentence.
+  Each recording's held-time, captured-audio, and buffer-overflow count are
+  logged, and drops are recorded at WARNING level, so a future cut-off can be
+  diagnosed (buffer overflow vs the device not delivering).
+
 ## [1.0.28] — 2026-07-27
 
 ### Changed

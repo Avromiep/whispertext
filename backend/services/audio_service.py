@@ -19,6 +19,13 @@ log = get_logger(__name__)
 
 MAX_RECORD_SECONDS = 600  # hard safety cap for hands-free mode
 
+# If a recording captured much less audio than the key was held for, the mic
+# dropped frames or stopped delivering mid-recording — the dictation is likely
+# cut off. Normal loss (stream stop latency + last partial block) is ~0.2s, so
+# 1.0s is a safe threshold; ignore very short holds where latency dominates.
+DROP_WARN_SECONDS = 1.0
+DROP_WARN_MIN_HELD = 2.0
+
 # Loudness alone cannot tell speech from room tone: on a noisy input the noise
 # floor (measured at 0.0113 peak frame RMS on a Steam virtual mic) overlaps
 # quiet speech (0.0126) almost exactly. Silero VAD decides instead — it listens
@@ -79,11 +86,20 @@ class AudioService:
         self._recording = False
         self._started_at = 0.0
         self._last_speech_s = 0.0
+        self._overflows = 0
+        self._last_capture: dict | None = None
 
     @property
     def last_speech_seconds(self) -> float:
         """Speech detected in the most recent recording — see `speech_seconds`."""
         return self._last_speech_s
+
+    @property
+    def last_capture(self) -> dict | None:
+        """Stats for the most recent recording — held_s, audio_s, dropped_s,
+        dropped_pct, overflows, and a `dropped` flag. Drives the mic-drop
+        warning and is logged for diagnosing future cut-offs."""
+        return self._last_capture
 
     # ------------------------------------------------------------------ devices
     @staticmethod
@@ -141,9 +157,14 @@ class AudioService:
                 return
             s = load_settings().audio
             self._chunks = []
+            self._overflows = 0
 
             def callback(indata: np.ndarray, frames: int, t, status) -> None:
                 if status:
+                    # input_overflow = frames were lost because we couldn't keep
+                    # up; counted so a cut-off can be traced to buffer vs device.
+                    if getattr(status, "input_overflow", False):
+                        self._overflows += 1
                     log.debug("Audio status: %s", status)
                 self._chunks.append(indata.copy())
                 # RMS level (0..1) for the overlay waveform animation.
@@ -172,21 +193,45 @@ class AudioService:
             log.info("Recording started (device=%s, %d Hz)", s.input_device, s.sample_rate)
 
     def stop(self) -> np.ndarray:
-        """Stop capture and return float32 mono audio normalized to [-1, 1]."""
+        """Stop capture and return float32 mono audio normalized to [-1, 1].
+
+        Also records capture stats (`last_capture`): if the mic delivered far
+        less audio than the key was held for, it dropped frames or stopped
+        mid-recording, so the dictation is cut off — flagged and logged."""
         with self._lock:
             self._recording = False
+            held = time.monotonic() - self._started_at
+            overflows = self._overflows
             if self._stream is not None:
                 try:
                     self._stream.stop()
                     self._stream.close()
                 finally:
                     self._stream = None
-            if not self._chunks:
-                return np.zeros(0, dtype=np.float32)
-
-            pcm = np.concatenate(self._chunks).flatten()
+            pcm = (np.concatenate(self._chunks).flatten() if self._chunks
+                   else np.zeros(0, dtype=np.int16))
             self._chunks = []
-        log.info("Recording stopped: %.2fs of audio", len(pcm) / load_settings().audio.sample_rate)
+
+        rate = load_settings().audio.sample_rate
+        audio_s = len(pcm) / rate
+        dropped = max(0.0, held - audio_s)
+        is_drop = dropped >= DROP_WARN_SECONDS and held >= DROP_WARN_MIN_HELD
+        self._last_capture = {
+            "held_s": round(held, 2), "audio_s": round(audio_s, 2),
+            "dropped_s": round(dropped, 2),
+            "dropped_pct": round(100 * dropped / held, 1) if held > 0 else 0.0,
+            "overflows": overflows, "dropped": is_drop,
+        }
+        if is_drop:
+            log.warning("Audio capture DROPPED %.1fs of %.1fs held (%.0f%%, %d overflow(s)) "
+                        "— mic likely glitched or was grabbed by another app. device=%s",
+                        dropped, held, self._last_capture["dropped_pct"], overflows,
+                        load_settings().audio.input_device)
+        else:
+            log.info("Recording stopped: %.2fs of audio (held %.2fs, %d overflow(s))",
+                     audio_s, held, overflows)
+        if pcm.size == 0:
+            return np.zeros(0, dtype=np.float32)
         return self._post_process(pcm)
 
     def _post_process(self, pcm: np.ndarray) -> np.ndarray:

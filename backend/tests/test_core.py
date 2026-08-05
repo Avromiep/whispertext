@@ -493,6 +493,50 @@ class TestVocabulary:
         assert apply_vocabulary_casing("nothing changes here", []) == "nothing changes here"
 
 
+# ---------------------------------------------------------- capture-drop detect
+class TestCaptureDropDetection:
+    """When the mic delivers far less audio than the key was held for, the
+    recording is cut off — it must be flagged (and logged) so a silent cut-off
+    becomes a visible warning."""
+
+    RATE = 16000
+
+    def _svc(self, monkeypatch):
+        from backend.services.audio_service import AudioService
+        svc = AudioService()
+        # Bypass VAD/gain post-processing — we're testing the capture stats.
+        monkeypatch.setattr(svc, "_post_process", lambda pcm: pcm.astype(np.float32))
+        svc._recording = True
+        svc._stream = None
+        svc._overflows = 0
+        return svc
+
+    def test_total_drop_flagged(self, monkeypatch):
+        svc = self._svc(monkeypatch)
+        svc._chunks = []                              # mic delivered nothing
+        svc._started_at = time.monotonic() - 20       # but key held ~20s
+        svc.stop()
+        cap = svc.last_capture
+        assert cap["dropped"] is True
+        assert cap["held_s"] >= 19 and cap["audio_s"] == 0.0
+
+    def test_partial_drop_flagged(self, monkeypatch):
+        svc = self._svc(monkeypatch)
+        svc._chunks = [np.zeros((2 * self.RATE, 1), dtype=np.int16)]  # only 2s captured
+        svc._started_at = time.monotonic() - 19                        # held ~19s
+        svc.stop()
+        assert svc.last_capture["dropped"] is True
+        assert 15 <= svc.last_capture["dropped_s"] <= 18
+
+    def test_normal_capture_not_flagged(self, monkeypatch):
+        svc = self._svc(monkeypatch)
+        svc._chunks = [np.zeros((5 * self.RATE, 1), dtype=np.int16)]  # 5s captured
+        svc._started_at = time.monotonic() - 5                         # held ~5s
+        svc.stop()
+        assert svc.last_capture["dropped"] is False
+        assert svc.last_capture["dropped_s"] < 1.0
+
+
 # --------------------------------------------------------------------- hotkeys
 class TestHotkeys:
     def test_double_tap_detection(self, monkeypatch):

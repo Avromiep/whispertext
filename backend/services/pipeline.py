@@ -146,6 +146,14 @@ class DictationPipeline:
 
     def _finish_recording(self) -> None:
         audio = audio_service.stop()
+        cap = getattr(audio_service, "last_capture", None)
+        if cap and cap.get("dropped"):
+            # The mic didn't deliver the whole recording — warn so a cut-off
+            # dictation isn't silent. The (partial) audio is still processed.
+            bus.notify(
+                f"Your mic dropped about {cap['dropped_s']:.0f}s of audio — the text may be "
+                "cut off. Try again, and check no other app (e.g. VoiceAttack) is using the mic.",
+                "warning")
         if audio.size == 0:  # nothing captured, or the buffer held only silence
             self._report_no_speech()
             return
