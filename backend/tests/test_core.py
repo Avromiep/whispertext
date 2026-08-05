@@ -493,6 +493,41 @@ class TestVocabulary:
         assert apply_vocabulary_casing("nothing changes here", []) == "nothing changes here"
 
 
+# --------------------------------------------------------------- resampling
+class TestResampling:
+    """Native-rate capture (any mic) is downsampled to 16 kHz in software, so
+    the resampler must preserve duration, amplitude, and frequency."""
+
+    def _sine(self, freq, seconds, rate):
+        t = np.linspace(0, seconds, int(rate * seconds), endpoint=False)
+        return (0.5 * np.sin(2 * np.pi * freq * t)).astype(np.float32)
+
+    @pytest.mark.parametrize("src", [44100, 48000, 32000, 16000])
+    def test_length_matches_target_duration(self, src):
+        from backend.services.audio_service import resample_to
+        audio = self._sine(200, 2.0, src)          # 2s at src
+        out = resample_to(audio, src, 16000)
+        assert abs(out.shape[0] - 2 * 16000) <= 2   # ~2s at 16 kHz
+
+    def test_preserves_amplitude_and_tone(self, src=44100):
+        from backend.services.audio_service import resample_to
+        audio = self._sine(440, 1.0, src)          # 440 Hz, well under Nyquist
+        out = resample_to(audio, src, 16000)
+        # peak amplitude preserved (~0.5), and it's still a real signal
+        assert 0.4 < float(np.max(np.abs(out))) < 0.6
+        # dominant frequency stays ~440 Hz
+        spec = np.abs(np.fft.rfft(out))
+        peak_bin = int(np.argmax(spec))
+        peak_hz = peak_bin * 16000 / out.shape[0]
+        assert abs(peak_hz - 440) < 15
+
+    def test_noop_when_rates_equal(self):
+        from backend.services.audio_service import resample_to
+        audio = self._sine(300, 0.5, 16000)
+        out = resample_to(audio, 16000, 16000)
+        assert np.array_equal(out, audio)
+
+
 # ---------------------------------------------------------- capture-drop detect
 class TestCaptureDropDetection:
     """When the mic delivers far less audio than the key was held for, the
@@ -505,7 +540,8 @@ class TestCaptureDropDetection:
         from backend.services.audio_service import AudioService
         svc = AudioService()
         # Bypass VAD/gain post-processing — we're testing the capture stats.
-        monkeypatch.setattr(svc, "_post_process", lambda pcm: pcm.astype(np.float32))
+        monkeypatch.setattr(svc, "_post_process",
+                            lambda pcm, capture_rate=None: pcm.astype(np.float32))
         svc._recording = True
         svc._stream = None
         svc._overflows = 0

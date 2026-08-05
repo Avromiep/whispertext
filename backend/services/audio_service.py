@@ -78,6 +78,28 @@ def peak_frame_rms(audio: np.ndarray, rate: int, frame_ms: int = 20) -> float:
     return float(np.max(np.sqrt(np.mean(frames ** 2, axis=1))))
 
 
+def resample_to(audio: np.ndarray, src_rate: int, dst_rate: int) -> np.ndarray:
+    """Resample float32 mono audio from src_rate to dst_rate.
+
+    FFT method (the same one scipy.signal.resample uses): for downsampling,
+    truncating the spectrum is an ideal anti-alias low-pass. numpy-only — no
+    extra dependency to bundle — and rate-agnostic, so it works for whatever
+    native rate the microphone reports on any machine."""
+    if src_rate == dst_rate or audio.size == 0:
+        return audio.astype(np.float32, copy=False)
+    n_src = audio.shape[0]
+    n_dst = int(round(n_src * dst_rate / src_rate))
+    if n_dst <= 0:
+        return np.zeros(0, dtype=np.float32)
+    spec = np.fft.rfft(audio)
+    dst_bins = n_dst // 2 + 1
+    if dst_bins < spec.shape[0]:
+        spec = spec[:dst_bins]                      # downsample: drop high freqs
+    elif dst_bins > spec.shape[0]:
+        spec = np.concatenate([spec, np.zeros(dst_bins - spec.shape[0], dtype=spec.dtype)])
+    return (np.fft.irfft(spec, n=n_dst) * (n_dst / n_src)).astype(np.float32)
+
+
 class AudioService:
     def __init__(self) -> None:
         self._stream: sd.InputStream | None = None
@@ -87,7 +109,19 @@ class AudioService:
         self._started_at = 0.0
         self._last_speech_s = 0.0
         self._overflows = 0
+        self._capture_rate = 0            # rate the mic actually captured at
         self._last_capture: dict | None = None
+
+    @staticmethod
+    def _native_rate(device) -> int | None:
+        """The device's native sample rate, so we capture at a rate it supports
+        directly instead of forcing the driver to resample."""
+        try:
+            info = (sd.query_devices(device, "input") if device is not None
+                    else sd.query_devices(kind="input"))
+            return int(round(info["default_samplerate"]))
+        except Exception:
+            return None
 
     @property
     def last_speech_seconds(self) -> float:
@@ -137,7 +171,9 @@ class AudioService:
         chunks = self._chunks[:]  # slice snapshots the list; callback only appends
         if not chunks:
             return np.zeros(0, dtype=np.float32)
-        need = int(seconds * load_settings().audio.sample_rate)
+        target = load_settings().audio.sample_rate
+        capture_rate = getattr(self, "_capture_rate", 0) or target
+        need = int(seconds * capture_rate)   # chunks are at the capture rate
         collected: list[np.ndarray] = []
         total = 0
         for c in reversed(chunks):
@@ -148,7 +184,9 @@ class AudioService:
         pcm = np.concatenate(list(reversed(collected))).flatten()
         if pcm.size > need:
             pcm = pcm[-need:]
-        return pcm.astype(np.float32) / 32768.0
+        audio = pcm.astype(np.float32) / 32768.0
+        # The VAD that consumes this expects the target rate (16 kHz).
+        return resample_to(audio, capture_rate, target) if capture_rate != target else audio
 
     def start(self) -> None:
         """Begin capture immediately. Raises RuntimeError if no mic available."""
@@ -174,23 +212,40 @@ class AudioService:
                     self._recording = False
                     raise sd.CallbackStop
 
-            try:
+            target = s.sample_rate
+            # Capture at the mic's native rate — asking a 44.1k/48k device for
+            # 16k makes the driver resample on the fly, a known source of
+            # dropouts. We downsample to `target` in software on stop() instead.
+            native = self._native_rate(s.input_device)
+
+            def open_at(rate: int) -> None:
                 self._stream = sd.InputStream(
-                    samplerate=s.sample_rate,
-                    channels=1,
-                    dtype="int16",
-                    device=s.input_device,
-                    blocksize=int(s.sample_rate * 0.03),  # 30 ms blocks
-                    callback=callback,
-                )
+                    samplerate=rate, channels=1, dtype="int16",
+                    device=s.input_device, blocksize=int(rate * 0.03),  # 30 ms
+                    callback=callback)
                 self._stream.start()
+                self._capture_rate = rate
+
+            try:
+                open_at(native or target)
             except (sd.PortAudioError, ValueError) as exc:
                 self._stream = None
-                raise RuntimeError(f"No microphone available: {exc}") from exc
+                if native and native != target:
+                    # Native rate rejected — fall back to the configured rate
+                    # (driver resamples) rather than failing the dictation.
+                    log.warning("Native capture at %d Hz failed (%s); using %d Hz", native, exc, target)
+                    try:
+                        open_at(target)
+                    except (sd.PortAudioError, ValueError) as exc2:
+                        self._stream = None
+                        raise RuntimeError(f"No microphone available: {exc2}") from exc2
+                else:
+                    raise RuntimeError(f"No microphone available: {exc}") from exc
 
             self._started_at = time.monotonic()
             self._recording = True
-            log.info("Recording started (device=%s, %d Hz)", s.input_device, s.sample_rate)
+            log.info("Recording started (device=%s, capture=%d Hz -> %d Hz)",
+                     s.input_device, self._capture_rate, target)
 
     def stop(self) -> np.ndarray:
         """Stop capture and return float32 mono audio normalized to [-1, 1].
@@ -212,8 +267,9 @@ class AudioService:
                    else np.zeros(0, dtype=np.int16))
             self._chunks = []
 
-        rate = load_settings().audio.sample_rate
-        audio_s = len(pcm) / rate
+        # Use the rate we actually captured at (may be the mic's native rate).
+        capture_rate = self._capture_rate or load_settings().audio.sample_rate
+        audio_s = len(pcm) / capture_rate
         dropped = max(0.0, held - audio_s)
         is_drop = dropped >= DROP_WARN_SECONDS and held >= DROP_WARN_MIN_HELD
         self._last_capture = {
@@ -232,11 +288,17 @@ class AudioService:
                      audio_s, held, overflows)
         if pcm.size == 0:
             return np.zeros(0, dtype=np.float32)
-        return self._post_process(pcm)
+        return self._post_process(pcm, capture_rate)
 
-    def _post_process(self, pcm: np.ndarray) -> np.ndarray:
+    def _post_process(self, pcm: np.ndarray, capture_rate: int | None = None) -> np.ndarray:
         s = load_settings().audio
+        target = s.sample_rate
+        if capture_rate is None:
+            capture_rate = target
         audio = pcm.astype(np.float32) / 32768.0
+        # Downsample the native-rate capture to the rate the engines/VAD expect.
+        if capture_rate != target and audio.size:
+            audio = resample_to(audio, capture_rate, target)
 
         # Checked before any gain: if nothing was actually said, hand back an
         # empty buffer so no engine ever sees silence to invent words from.

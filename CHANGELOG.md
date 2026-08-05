@@ -3,6 +3,16 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.30] — 2026-08-05
+
+### Fixed
+- Recordings could drop audio and cut off mid-dictation. The app asked the mic
+  for 16 kHz, but most mics run at 44.1/48 kHz, so the audio driver had to
+  resample on the fly — a known source of dropouts. It now records at the
+  microphone's native rate (whatever that is, on any machine) and downsamples
+  to 16 kHz in software, removing the driver-resampling step. Works for any
+  mic, and falls back to the old behaviour if native-rate capture is refused.
+
 ## [1.0.29] — 2026-08-05
 
 ### Added
