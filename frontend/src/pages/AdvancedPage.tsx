@@ -1,11 +1,15 @@
 /** Advanced: appearance, startup, debug, telemetry, whisper tuning, logs. */
-import { FileDown } from "lucide-react";
+import { useState } from "react";
+import { Check, Copy, FileDown, RefreshCw } from "lucide-react";
 import { api, API_BASE, bridge } from "../lib/api";
 import { useSettings } from "../hooks/useSettings";
 import { Button, PageHeader, Section, Select, Slider, Toggle } from "../components/ui";
 
 export default function AdvancedPage() {
   const { settings, patch } = useSettings();
+  const [logText, setLogText] = useState("");
+  const [logLoading, setLogLoading] = useState(false);
+  const [logCopied, setLogCopied] = useState(false);
 
   if (!settings) return null;
   const g = settings.general;
@@ -18,6 +22,24 @@ export default function AdvancedPage() {
   const setBoot = async (v: boolean) => {
     await patch({ general: { launch_on_boot: v } });
     bridge?.setLoginItem(v);
+  };
+
+  const loadLogs = async () => {
+    setLogLoading(true);
+    try { setLogText((await api.tailLogs(500)).text); }
+    catch { setLogText("Couldn't load logs."); }
+    setLogLoading(false);
+  };
+  const copyLogs = async () => {
+    try {
+      await navigator.clipboard.writeText(logText);
+      setLogCopied(true);
+      setTimeout(() => setLogCopied(false), 1500);
+    } catch { /* clipboard unavailable */ }
+  };
+  const exportLogs = () => {
+    const url = `${API_BASE}/logs/export`;
+    if (bridge) bridge.openExternal(url); else window.open(url);
   };
 
   return (
@@ -66,15 +88,36 @@ export default function AdvancedPage() {
           onChange={(v) => patch({ history: { retention_days: v } })} />
       </Section>
 
+      <Section title="Logs"
+        description="Recent activity. If something goes wrong, load these and use Copy, then paste them into chat with support.">
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" onClick={loadLogs} disabled={logLoading}>
+            <RefreshCw size={13} className={logLoading ? "animate-spin" : ""} />
+            {logLoading ? "Loading…" : logText ? "Refresh" : "View recent logs"}
+          </Button>
+          {logText && (
+            <Button size="sm" onClick={copyLogs}>
+              {logCopied ? <><Check size={13} className="text-emerald-400" /> Copied</> : <><Copy size={13} /> Copy</>}
+            </Button>
+          )}
+          <Button size="sm" onClick={exportLogs}>
+            <FileDown size={13} /> Export all (.zip)
+          </Button>
+        </div>
+        {logText && (
+          <pre className="mt-3 max-h-72 overflow-auto rounded-xl bg-elevated border border-border p-3
+            text-[11px] leading-relaxed font-mono text-muted whitespace-pre-wrap break-words">
+            {logText}
+          </pre>
+        )}
+      </Section>
+
       <Section title="Developer">
         <Toggle label="Debug mode" description="Verbose logging for troubleshooting"
           checked={g.debug_mode} onChange={(v) => patch({ general: { debug_mode: v } })} />
         <Toggle label="Telemetry" description="Anonymous usage statistics (off by default)"
           checked={g.telemetry} onChange={(v) => patch({ general: { telemetry: v } })} />
-        <div className="flex gap-2 mt-3">
-          <Button size="sm" onClick={() => bridge ? bridge.openExternal(`${API_BASE}/logs/export`) : window.open(`${API_BASE}/logs/export`)}>
-            <FileDown size={13} /> Export logs
-          </Button>
+        <div className="mt-3">
           <Button size="sm" onClick={() => api.pauseHotkeys(false)}>Restart hotkey service</Button>
         </div>
       </Section>

@@ -3,6 +3,14 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.31] — 2026-08-06
+
+### Added
+- A Logs section on the Advanced page. "View recent logs" shows the recent
+  activity right in the app, "Copy" puts it on your clipboard to paste into
+  chat with support, and "Export all" still saves the full zip — no terminal
+  needed.
+
 ## [1.0.30] — 2026-08-05
 
 ### Fixed

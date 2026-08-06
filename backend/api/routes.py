@@ -285,6 +285,20 @@ async def export_logs() -> StreamingResponse:
                                       "attachment; filename=whispertext-logs.zip"})
 
 
+@router.get("/logs/tail")
+async def tail_logs(lines: int = 400) -> dict:
+    """The last `lines` lines of the current log, for viewing/copying in-app
+    (so users can share logs without touching a terminal)."""
+    lines = max(1, min(3000, lines))
+    try:
+        content = (Path(LOG_DIR) / "whispertext.log").read_text(
+            encoding="utf-8", errors="ignore").splitlines()
+    except OSError:
+        content = []
+    tail = content[-lines:]
+    return {"text": "\n".join(tail), "shown": len(tail), "total": len(content)}
+
+
 # -------------------------------------------------------------------- websocket
 HEARTBEAT_S = 5.0
 

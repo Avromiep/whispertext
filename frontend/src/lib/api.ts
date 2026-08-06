@@ -63,6 +63,7 @@ export const api = {
   validateGroq: () => request<{ connected: boolean; message: string; latency_ms?: number }>("/transcription/groq/validate", { method: "POST" }),
   validateGroqBackup: () => request<{ connected: boolean; message: string; latency_ms?: number }>("/transcription/groq/validate-backup", { method: "POST" }),
   checkUpdates: () => request<{ current: string; latest: string; update_available: boolean; url: string }>("/updates/check", { method: "POST" }),
+  tailLogs: (lines = 400) => request<{ text: string; shown: number; total: number }>(`/logs/tail?lines=${lines}`),
 };
 
 /** Auto-update progress as reported by the Electron main process.
