@@ -121,11 +121,11 @@ export default function AboutPage() {
         </Dialog>
       )}
 
-      {/* Downloaded → confirm the restart that finishes the install */}
+      {/* Downloaded → confirm the relaunch that finishes the install */}
       {st === "ready" && (
         <Dialog title="Update ready"
-          actions={<Button size="sm" variant="primary" onClick={() => bridge?.installUpdate()}>OK, restart now</Button>}>
-          Update{update?.version ? ` v${update.version}` : ""} downloaded. WhisperText will restart to finish installing.
+          actions={<Button size="sm" variant="primary" onClick={() => bridge?.installUpdate()}>Relaunch</Button>}>
+          Update{update?.version ? ` v${update.version}` : ""} downloaded. WhisperText will relaunch to finish installing.
         </Dialog>
       )}
 

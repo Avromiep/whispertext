@@ -3,6 +3,12 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.32] — 2026-08-06
+
+### Changed
+- The update-ready dialog's button now says "Relaunch" (was "OK, restart
+  now"), and its text says the app will "relaunch" to finish installing.
+
 ## [1.0.31] — 2026-08-06
 
 ### Added
