@@ -254,6 +254,12 @@ async def validate_deepgram() -> dict:
     return await deepgram_service.validate()
 
 
+@router.get("/transcription/deepgram/balance")
+async def deepgram_balance() -> dict:
+    from backend.services import deepgram_service
+    return await deepgram_service.balance()
+
+
 # ----------------------------------------------------------------- whisper mdls
 @router.get("/models")
 async def list_models() -> list[dict]:

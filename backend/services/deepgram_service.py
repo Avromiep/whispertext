@@ -51,6 +51,40 @@ async def validate(provider_id: str = PROVIDER_ID) -> dict:
         return {"connected": False, "message": str(exc)}
 
 
+async def balance(provider_id: str = PROVIDER_ID) -> dict:
+    """Remaining credit on the Deepgram account: {ok, amount, units} or
+    {ok: False, message}. Sums the balances of the first project."""
+    key = get_api_key(provider_id)
+    if not key:
+        return {"ok": False, "message": "No API key configured"}
+    try:
+        async with httpx.AsyncClient(timeout=8) as c:
+            pr = await c.get(PROJECTS_URL, headers=_auth(key))
+            if pr.status_code in (401, 403):
+                return {"ok": False, "message": "Invalid API key"}
+            pr.raise_for_status()
+            projects = pr.json().get("projects", [])
+            if not projects:
+                return {"ok": False, "message": "No Deepgram project found"}
+            pid = projects[0]["project_id"]
+            br = await c.get(f"{PROJECTS_URL}/{pid}/balances", headers=_auth(key))
+            if br.status_code == 403:
+                # Reading billing needs an Admin/Owner-scoped key; a Member key
+                # (fine for transcription) can't. Tell the user how to fix it.
+                return {"ok": False, "needs_admin": True,
+                        "message": "This key can't read your balance — it needs Admin permission. "
+                                   "Create an Admin key at console.deepgram.com (or check the balance there)."}
+            br.raise_for_status()
+            balances = br.json().get("balances", [])
+            if not balances:
+                return {"ok": False, "message": "No balance on this account"}
+            total = sum(float(b.get("amount", 0)) for b in balances)
+            units = balances[0].get("units", "usd")
+            return {"ok": True, "amount": round(total, 2), "units": units}
+    except httpx.HTTPError as exc:
+        return {"ok": False, "message": str(exc)}
+
+
 def _ws_url(model: str, sample_rate: int, language: str, keyterms: list[str]) -> str:
     params = [("model", model), ("encoding", "linear16"), ("sample_rate", str(sample_rate)),
               ("channels", "1"), ("punctuate", "true"), ("smart_format", "true"),

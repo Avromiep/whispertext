@@ -3,6 +3,14 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.34] — 2026-08-07
+
+### Added
+- **Deepgram credit remaining** (Models → Deepgram). Shows how much of your
+  Deepgram balance is left, with a Refresh button. Reading the balance needs an
+  Admin- or Owner-scoped Deepgram key; a Member key (fine for transcription)
+  shows a short note on how to create one instead of a number.
+
 ## [1.0.33] — 2026-08-06
 
 ### Added

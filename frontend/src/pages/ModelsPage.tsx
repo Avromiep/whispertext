@@ -1,6 +1,6 @@
 /** Whisper model management: transcription engine choice, local model status, downloads. */
 import { useCallback, useEffect, useState } from "react";
-import { Check, Cloud, Download, HardDrive, Loader2, Radio, Trash2, X, Zap } from "lucide-react";
+import { Check, Cloud, Download, HardDrive, Loader2, Radio, RefreshCw, Trash2, X, Zap } from "lucide-react";
 import { api, SystemInfo, WhisperModelInfo } from "../lib/api";
 import { useBackendEvents } from "../lib/ws";
 import { useSettings } from "../hooks/useSettings";
@@ -53,6 +53,50 @@ function GroqKeyRow({ label, placeholder, providerId, validate, onConfiguredChan
         {result && (result.connected
           ? <span className="text-xs text-emerald-400 flex items-center gap-1"><Check size={13} /> Connected{result.latency_ms ? ` · ${result.latency_ms} ms` : ""}</span>
           : <span className="text-xs text-red-400 flex items-center gap-1"><X size={13} /> {result.message}</span>)}
+      </div>
+    </div>
+  );
+}
+
+interface BalanceResult { ok: boolean; amount?: number; units?: string; message?: string; needs_admin?: boolean }
+
+/** Remaining Deepgram credit. Reading the balance needs an Admin-scoped key;
+ * a Member key (fine for transcription) gets a clear note instead of a number. */
+function DeepgramBalance() {
+  const [loading, setLoading] = useState(true);
+  const [bal, setBal] = useState<BalanceResult | null>(null);
+
+  const refresh = useCallback(() => {
+    setLoading(true);
+    api.deepgramBalance()
+      .then(setBal)
+      .catch((e) => setBal({ ok: false, message: String(e) }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  return (
+    <div className="rounded-xl border border-border bg-black/5 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-xs text-muted">Credit remaining</div>
+          {loading ? (
+            <div className="text-sm font-medium flex items-center gap-1.5 mt-0.5">
+              <Loader2 size={14} className="animate-spin" /> Checking…
+            </div>
+          ) : bal?.ok ? (
+            <div className="text-lg font-semibold mt-0.5">
+              ${bal.amount?.toFixed(2)}
+              <span className="text-xs text-muted font-normal ml-1 uppercase">{bal.units}</span>
+            </div>
+          ) : (
+            <div className="text-xs text-amber-500 mt-0.5">{bal?.message || "Unavailable"}</div>
+          )}
+        </div>
+        <Button size="sm" onClick={refresh} disabled={loading}>
+          {loading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Refresh
+        </Button>
       </div>
     </div>
   );
@@ -128,6 +172,7 @@ export default function ModelsPage() {
           <div className="space-y-4 pt-3 border-t border-border">
             <GroqKeyRow label="Deepgram API key" placeholder="Get a free key ($200 credit) at console.deepgram.com"
               providerId="deepgram" validate={api.validateDeepgram} onConfiguredChange={setDeepgramConfigured} />
+            {deepgramConfigured && <DeepgramBalance />}
             <p className="text-[11px] text-muted">
               Deepgram transcribes as you speak, so releasing the hotkey feels instant. If it's ever
               unavailable, WhisperText falls back to Groq (if configured), then local Whisper — you never
