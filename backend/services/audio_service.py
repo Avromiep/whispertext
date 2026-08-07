@@ -111,6 +111,12 @@ class AudioService:
         self._overflows = 0
         self._capture_rate = 0            # rate the mic actually captured at
         self._last_capture: dict | None = None
+        self._chunk_sink = None           # optional callable(bytes) fed each block (live streaming)
+
+    def set_chunk_sink(self, sink) -> None:
+        """Register a callable to receive each captured block as raw linear16
+        bytes (used to stream to Deepgram live). Pass None to detach."""
+        self._chunk_sink = sink
 
     @staticmethod
     def _native_rate(device) -> int | None:
@@ -205,6 +211,12 @@ class AudioService:
                         self._overflows += 1
                     log.debug("Audio status: %s", status)
                 self._chunks.append(indata.copy())
+                sink = self._chunk_sink
+                if sink is not None:      # live streaming (Deepgram) — cheap enqueue
+                    try:
+                        sink(indata.tobytes())
+                    except Exception:
+                        pass
                 # RMS level (0..1) for the overlay waveform animation.
                 rms = float(np.sqrt(np.mean(indata.astype(np.float32) ** 2)) / 32768.0)
                 bus.publish("audio_level", {"level": min(1.0, rms * 8)})

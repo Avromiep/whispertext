@@ -7,6 +7,7 @@ keyboard>=0.13
 pyperclip>=1.9
 keyring>=25
 httpx>=0.27
+websockets>=12          # Deepgram live streaming
 pydantic>=2.9
 pydantic-settings>=2.6
 pywin32>=306; sys_platform == "win32"

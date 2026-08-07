@@ -248,6 +248,12 @@ async def validate_groq_backup() -> dict:
     return await groq_whisper_service.validate(BACKUP_PROVIDER_ID)
 
 
+@router.post("/transcription/deepgram/validate")
+async def validate_deepgram() -> dict:
+    from backend.services import deepgram_service
+    return await deepgram_service.validate()
+
+
 # ----------------------------------------------------------------- whisper mdls
 @router.get("/models")
 async def list_models() -> list[dict]:

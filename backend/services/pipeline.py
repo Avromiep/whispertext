@@ -11,6 +11,7 @@ import threading
 import time
 
 from backend.models.settings import load_settings
+from backend.services import deepgram_service
 from backend.services.audio_service import audio_service, speech_seconds
 from backend.services.event_bus import bus
 from backend.services.groq_whisper_service import (BACKUP_PROVIDER_ID, PROVIDER_ID,
@@ -42,6 +43,7 @@ class DictationPipeline:
         # stops after transcription and reports the raw text over the
         # WebSocket instead of running cleanup/typing/history.
         self._test_mode = False
+        self._dg_session = None                # active Deepgram live session, if any
         # Persistent loop: keeps provider HTTP connection pools warm between
         # dictations (asyncio.run would tear them down every time).
         self._loop = asyncio.new_event_loop()
@@ -98,9 +100,47 @@ class DictationPipeline:
             bus.error(str(exc), code="no_microphone")
             return
         bus.status("listening", hands_free=hands_free)
-        if hands_free and load_settings().hotkeys.hands_free_auto_stop:
+        cfg = load_settings()
+        if cfg.whisper.engine == "deepgram":
+            self._start_deepgram(cfg)
+        if hands_free and cfg.hotkeys.hands_free_auto_stop:
             threading.Thread(target=self._hands_free_endpoint, daemon=True,
                              name="hands-free-endpoint").start()
+
+    def _start_deepgram(self, cfg) -> None:
+        """Open a live Deepgram stream and feed the mic to it as we record, so
+        the transcript is nearly ready by the time the key is released."""
+        rate = audio_service._capture_rate or cfg.audio.sample_rate
+        session = deepgram_service.make_live(
+            cfg.whisper.deepgram_model, rate, cfg.whisper.language, cfg.vocabulary.words)
+        if session is None:
+            return  # no Deepgram key — transcription will fall back to Groq/local
+        self._dg_session = session
+        audio_service.set_chunk_sink(session.feed)
+        asyncio.run_coroutine_threadsafe(session.start(), self._loop)  # connect in background
+
+    def _finish_deepgram(self) -> str | None:
+        """Finalize the live session and return its transcript (None => fall
+        back to batch). Detaches the sink and clears the session either way."""
+        session = self._dg_session
+        self._dg_session = None
+        if session is None:
+            return None
+        audio_service.set_chunk_sink(None)
+        try:
+            text = asyncio.run_coroutine_threadsafe(session.finish(), self._loop).result(12.0)
+            return text or None       # empty => fall back (silence or a stream hiccup)
+        except Exception as exc:
+            log.warning("Deepgram streaming failed (%s); falling back to batch", exc)
+            return None
+
+    def _discard_deepgram(self) -> None:
+        session = self._dg_session
+        self._dg_session = None
+        if session is None:
+            return
+        audio_service.set_chunk_sink(None)
+        asyncio.run_coroutine_threadsafe(session.close(), self._loop)
 
     def _hands_free_endpoint(self) -> None:
         """End a hands-free dictation when the speaker stops talking.
@@ -155,6 +195,7 @@ class DictationPipeline:
                 "cut off. Try again, and check no other app (e.g. VoiceAttack) is using the mic.",
                 "warning")
         if audio.size == 0:  # nothing captured, or the buffer held only silence
+            self._discard_deepgram()
             self._report_no_speech()
             return
         # Process on a worker thread so the hook thread returns instantly.
@@ -214,13 +255,21 @@ class DictationPipeline:
             self._busy.release()
 
     def _transcribe(self, audio):
-        """Groq (fast cloud) when configured, trying a backup key (e.g. once
-        the free tier on the primary account is exhausted) before finally
-        falling back to local Whisper — a dictation is never lost just
-        because a cloud call failed."""
+        """Resolve the transcript for the configured engine, with a robust
+        fallback chain so a dictation is never lost:
+        Deepgram (live) -> Groq (batch) -> local Whisper."""
         cfg = load_settings()
         s = cfg.whisper
-        if s.engine == "groq":
+
+        # Deepgram: the transcript was streamed while the user talked; finishing
+        # just flushes the tail. Empty/failure falls through to batch below.
+        if s.engine == "deepgram":
+            text = self._finish_deepgram()
+            if text:
+                return deepgram_service.result(text, s.language)
+
+        # Groq batch — also the fallback path for a failed Deepgram stream.
+        if s.engine in ("groq", "deepgram"):
             prompt = build_vocabulary_prompt(cfg.vocabulary.words)
             for provider_id in (PROVIDER_ID, BACKUP_PROVIDER_ID):
                 key = encryption.get_api_key(provider_id)
@@ -234,7 +283,10 @@ class DictationPipeline:
                 except Exception as exc:
                     log.warning("Groq transcription failed via %s (%s); trying next",
                                provider_id, exc)
-            bus.notify("Cloud transcription unavailable — used local instead.", "warning")
+            if s.engine == "deepgram":
+                bus.notify("Deepgram unavailable — used another engine.", "warning")
+            else:
+                bus.notify("Cloud transcription unavailable — used local instead.", "warning")
         return whisper_service.transcribe(audio)
 
     @staticmethod

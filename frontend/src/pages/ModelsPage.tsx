@@ -1,6 +1,6 @@
 /** Whisper model management: transcription engine choice, local model status, downloads. */
 import { useCallback, useEffect, useState } from "react";
-import { Check, Cloud, Download, HardDrive, Loader2, Trash2, X, Zap } from "lucide-react";
+import { Check, Cloud, Download, HardDrive, Loader2, Radio, Trash2, X, Zap } from "lucide-react";
 import { api, SystemInfo, WhisperModelInfo } from "../lib/api";
 import { useBackendEvents } from "../lib/ws";
 import { useSettings } from "../hooks/useSettings";
@@ -65,12 +65,15 @@ export default function ModelsPage() {
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [showBackup, setShowBackup] = useState(false);
   const [groqConfigured, setGroqConfigured] = useState(false);
+  const [deepgramConfigured, setDeepgramConfigured] = useState(false);
 
   const load = useCallback(() => { api.models().then(setModels).catch(() => {}); }, []);
   useEffect(() => {
     load();
     api.systemInfo().then(setInfo).catch(() => {});
     api.hasApiKey("groq_backup").then((r) => setShowBackup(r.configured)).catch(() => {});
+    api.hasApiKey("groq").then((r) => setGroqConfigured(r.configured)).catch(() => {});
+    api.hasApiKey("deepgram").then((r) => setDeepgramConfigured(r.configured)).catch(() => {});
   }, [load]);
 
   useBackendEvents((e) => {
@@ -99,26 +102,39 @@ export default function ModelsPage() {
           </Badge>
         } />
 
-      <Section title="Transcription engine" description="Local never leaves your machine. Cloud is dramatically faster — Groq runs Whisper on hardware built for speed, benchmarked at 200-300x real-time.">
-        <div className="grid grid-cols-2 gap-2 mb-4">
+      <Section title="Transcription engine" description="Local never leaves your machine. Groq is a fast batch cloud engine. Deepgram streams live — it transcribes while you talk, so there's no wait after you release the hotkey.">
+        <div className="grid grid-cols-3 gap-2 mb-4">
           <button onClick={() => patch({ whisper: { engine: "local" } })}
             className={cn("rounded-xl border p-3 text-left transition-all",
               engine === "local" ? "border-accent bg-accent/10" : "border-border hover:border-accent/40")}>
-            <div className="text-sm font-medium flex items-center gap-1.5"><HardDrive size={13} /> Local (Whisper)</div>
-            <div className="text-[11px] text-muted mt-0.5">Offline, private, no account needed</div>
+            <div className="text-sm font-medium flex items-center gap-1.5"><HardDrive size={13} /> Local</div>
+            <div className="text-[11px] text-muted mt-0.5">Offline, private, no account</div>
           </button>
           <button onClick={() => patch({ whisper: { engine: "groq" } })}
             className={cn("rounded-xl border p-3 text-left transition-all",
               engine === "groq" ? "border-accent bg-accent/10" : "border-border hover:border-accent/40")}>
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-sm font-medium flex items-center gap-1.5"><Cloud size={13} /> Groq Cloud</div>
-              {groqConfigured
-                ? <Badge color="green" icon={<Check size={11} />}>Key configured</Badge>
-                : <Badge color="yellow">No key</Badge>}
-            </div>
-            <div className="text-[11px] text-muted mt-0.5">Free tier: 2,000 requests/day, no card</div>
+            <div className="text-sm font-medium flex items-center gap-1.5"><Cloud size={13} /> Groq</div>
+            <div className="text-[11px] text-muted mt-0.5">{groqConfigured ? "Key configured ✓" : "Fast batch · needs key"}</div>
+          </button>
+          <button onClick={() => patch({ whisper: { engine: "deepgram" } })}
+            className={cn("rounded-xl border p-3 text-left transition-all",
+              engine === "deepgram" ? "border-accent bg-accent/10" : "border-border hover:border-accent/40")}>
+            <div className="text-sm font-medium flex items-center gap-1.5"><Radio size={13} /> Deepgram</div>
+            <div className="text-[11px] text-muted mt-0.5">{deepgramConfigured ? "Key configured ✓" : "Live · feels instant"}</div>
           </button>
         </div>
+
+        {engine === "deepgram" && (
+          <div className="space-y-4 pt-3 border-t border-border">
+            <GroqKeyRow label="Deepgram API key" placeholder="Get a free key ($200 credit) at console.deepgram.com"
+              providerId="deepgram" validate={api.validateDeepgram} onConfiguredChange={setDeepgramConfigured} />
+            <p className="text-[11px] text-muted">
+              Deepgram transcribes as you speak, so releasing the hotkey feels instant. If it's ever
+              unavailable, WhisperText falls back to Groq (if configured), then local Whisper — you never
+              lose a transcription. Groq's key is kept and used whenever you switch back.
+            </p>
+          </div>
+        )}
 
         {engine === "groq" && (
           <div className="space-y-4 pt-3 border-t border-border">

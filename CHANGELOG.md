@@ -3,6 +3,17 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.33] — 2026-08-06
+
+### Added
+- **Deepgram as a live-streaming transcription engine** (Models → Transcription
+  engine). Unlike Groq/Whisper, which transcribe the whole clip after you
+  release the hotkey, Deepgram transcribes *while you talk*, so releasing feels
+  instant — especially on long dictations. Add a Deepgram key (free $200
+  credit) and switch to it; Groq stays configured and is used the moment you
+  switch back. If Deepgram is ever unavailable it falls back automatically to
+  Groq, then local Whisper, so a dictation is never lost.
+
 ## [1.0.32] — 2026-08-06
 
 ### Changed

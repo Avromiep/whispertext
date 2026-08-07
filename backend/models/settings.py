@@ -55,11 +55,13 @@ class WhisperSettings(BaseModel):
     # accuracy for short dictation utterances.
     beam_size: int = 1
     # "local" = faster-whisper on this machine's CPU/GPU. "groq" = Groq's
-    # hosted Whisper (purpose-built inference hardware, ~200-300x real-time),
-    # matching the speed of cloud dictation apps. Falls back to local
-    # automatically if the cloud call fails for any reason.
-    engine: Literal["local", "groq"] = "local"
+    # hosted Whisper (batch, ~200-300x real-time). "deepgram" = Deepgram's live
+    # streaming (transcribes as you talk, so there's no post-release wait).
+    # Any cloud engine falls back automatically (Deepgram -> Groq -> local) if a
+    # call fails, so a dictation is never lost.
+    engine: Literal["local", "groq", "deepgram"] = "local"
     groq_model: str = "whisper-large-v3-turbo"
+    deepgram_model: str = "nova-3"
 
 
 class ProviderConfig(BaseModel):

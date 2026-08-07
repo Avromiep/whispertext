@@ -17,6 +17,7 @@ Set-Location "$PSScriptRoot\.."
   --collect-all tokenizers `
   --collect-all huggingface_hub `
   --collect-submodules keyring `
+  --collect-submodules websockets `
   --hidden-import backend.app `
   backend\app.py
 
