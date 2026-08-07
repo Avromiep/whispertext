@@ -3,6 +3,16 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.35] — 2026-08-07
+
+### Changed
+- **Setup now leads with Deepgram.** The first-run "how you dictate" step offers
+  Deepgram (recommended, selected by default), Groq, and fully-offline local —
+  you can pick any and change later in Settings. The Deepgram path walks you
+  through creating an **Owner/Admin** key (with a callout on the Permissions
+  dropdown) and confirms it by showing your remaining credit; a Member key is
+  blocked with instructions, since only Owner/Admin keys can read the balance.
+
 ## [1.0.34] — 2026-08-07
 
 ### Added

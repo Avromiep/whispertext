@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import {
   Mic, Keyboard, Sparkles, Check, X, ChevronRight, ChevronLeft, ShieldCheck, Loader2,
-  Zap, HardDrive, ExternalLink,
+  Zap, HardDrive, ExternalLink, Radio, AlertTriangle,
 } from "lucide-react";
 import { api, bridge } from "../lib/api";
 import { useBackendEvents } from "../lib/ws";
@@ -21,10 +21,19 @@ export default function Onboarding() {
   const { patch } = useSettings();
   const [step, setStep] = useState(0);
 
-  // Transcription engine (the star feature — Groq cloud or fully local).
-  const [engine, setEngine] = useState<"groq" | "local">("groq");
+  // Transcription engine (the star feature). Deepgram is the default: it streams
+  // live so releasing the hotkey feels instant. Users can switch to Groq (fast
+  // batch cloud) or fully local.
+  const [engine, setEngine] = useState<"deepgram" | "groq" | "local">("deepgram");
   const [groqKey, setGroqKey] = useState("");
   const [groqStatus, setGroqStatus] = useState<"idle" | "checking" | "ok" | "bad">("idle");
+
+  // Deepgram setup. The key must be Owner/Admin-scoped — we prove that by
+  // actually reading the balance during setup: a Member key transcribes fine but
+  // can't read credit, so "member" blocks the step until they make an Admin key.
+  const [dgKey, setDgKey] = useState("");
+  const [dgStatus, setDgStatus] = useState<"idle" | "checking" | "ok" | "bad" | "member">("idle");
+  const [dgCredit, setDgCredit] = useState<string | null>(null);
 
   const [model, setModel] = useState("small");
   const [micOk, setMicOk] = useState<boolean | null>(null);
@@ -49,6 +58,28 @@ export default function Onboarding() {
       setGroqStatus(r.connected ? "ok" : "bad");
     } catch {
       setGroqStatus("bad");
+    }
+  };
+
+  const validateDeepgramKey = async () => {
+    setDgStatus("checking");
+    setDgCredit(null);
+    try {
+      await api.setApiKey("deepgram", dgKey);
+      const r = await api.validateDeepgram();
+      if (!r.connected) { setDgStatus("bad"); return; }
+      // Key works for transcription — now require Owner/Admin by reading credit.
+      const b = await api.deepgramBalance();
+      if (b.ok) {
+        setDgCredit(`$${(b.amount ?? 0).toFixed(2)}`);
+        setDgStatus("ok");
+      } else if (b.needs_admin) {
+        setDgStatus("member");        // valid key, but Member-scoped — block
+      } else {
+        setDgStatus("ok");            // valid key; balance unreadable for another reason
+      }
+    } catch {
+      setDgStatus("bad");
     }
   };
 
@@ -101,7 +132,9 @@ export default function Onboarding() {
   const canNext = [
     /* 0 welcome    */ true,
     /* 1 permissions*/ micOk === true,
-    /* 2 groq       */ engine === "local" || groqStatus === "ok",
+    /* 2 engine     */ engine === "local"
+                        || (engine === "groq" && groqStatus === "ok")
+                        || (engine === "deepgram" && dgStatus === "ok"),
     /* 3 model      */ true,
     /* 4 shortcut   */ true,
     /* 5 test       */ testState === "done",
@@ -152,22 +185,37 @@ export default function Onboarding() {
       )}
     </div>,
 
-    /* 2 — Instant transcription (Groq) or fully local */
-    <div key="groq" className="space-y-4">
-      <h2 className="text-xl font-semibold">Get instant dictation</h2>
+    /* 2 — Transcription engine: Deepgram (default) / Groq / Local */
+    <div key="engine" className="space-y-4">
+      <h2 className="text-xl font-semibold">Choose how you dictate</h2>
       <p className="text-sm text-muted">
-        WhisperText can transcribe the moment you release the key using a free cloud service —
-        or run entirely on your computer, fully private but a bit slower.
+        Deepgram transcribes live as you speak — no wait when you release the key. You can switch
+        engines here now or anytime later in Settings.
       </p>
       <div className="grid grid-cols-1 gap-2">
+        <button onClick={() => setEngine("deepgram")}
+          className={cn("flex items-start justify-between rounded-2xl border p-4 text-left transition-all",
+            engine === "deepgram" ? "border-accent bg-accent/10" : "border-border bg-surface hover:border-accent/40")}>
+          <div className="flex items-start gap-3">
+            <Radio size={18} className="text-accent shrink-0 mt-0.5" />
+            <div>
+              <div className="text-sm font-medium flex items-center gap-2">
+                Deepgram
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-accent bg-accent/15 rounded-full px-1.5 py-0.5">Recommended</span>
+              </div>
+              <div className="text-xs text-muted mt-0.5">Live streaming — feels instant. Free $200 credit, no card.</div>
+            </div>
+          </div>
+          {engine === "deepgram" && <Check size={16} className="text-accent shrink-0" />}
+        </button>
         <button onClick={() => setEngine("groq")}
           className={cn("flex items-start justify-between rounded-2xl border p-4 text-left transition-all",
             engine === "groq" ? "border-accent bg-accent/10" : "border-border bg-surface hover:border-accent/40")}>
           <div className="flex items-start gap-3">
-            <Zap size={18} className="text-accent shrink-0 mt-0.5" />
+            <Zap size={18} className="text-muted shrink-0 mt-0.5" />
             <div>
-              <div className="text-sm font-medium">Instant (recommended)</div>
-              <div className="text-xs text-muted mt-0.5">Free, no credit card — about a minute to set up</div>
+              <div className="text-sm font-medium">Groq</div>
+              <div className="text-xs text-muted mt-0.5">Fast batch cloud — transcribes just after you release. Free, no card.</div>
             </div>
           </div>
           {engine === "groq" && <Check size={16} className="text-accent shrink-0" />}
@@ -179,12 +227,55 @@ export default function Onboarding() {
             <HardDrive size={18} className="text-muted shrink-0 mt-0.5" />
             <div>
               <div className="text-sm font-medium">Fully offline</div>
-              <div className="text-xs text-muted mt-0.5">100% private, runs on your computer, a bit slower</div>
+              <div className="text-xs text-muted mt-0.5">100% private, runs on your computer, a bit slower.</div>
             </div>
           </div>
           {engine === "local" && <Check size={16} className="text-accent shrink-0" />}
         </button>
       </div>
+
+      {engine === "deepgram" && (
+        <Card className="space-y-3 animate-scale-in">
+          <div>
+            <div className="text-sm font-medium mb-1.5">Step 1 — Create an Owner or Admin key</div>
+            <Button size="sm" onClick={() => bridge ? bridge.openExternal("https://console.deepgram.com/signup") : window.open("https://console.deepgram.com/signup")}>
+              Open Deepgram <ExternalLink size={13} />
+            </Button>
+            <div className="mt-2 flex gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-2.5">
+              <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-fg/90">
+                In the console: <span className="font-medium">API Keys → Create a New API Key</span>, then open the
+                <span className="font-medium"> Permissions</span> dropdown and choose <span className="font-medium">Owner</span> (or Admin) —
+                <span className="font-medium"> not Member</span>. Only Owner/Admin keys let WhisperText show your remaining credit. Copy the key (shown once).
+              </p>
+            </div>
+          </div>
+          <div>
+            <div className="text-sm font-medium mb-1.5">Step 2 — Paste it here</div>
+            <SecretInput value={dgKey} onChange={(v) => { setDgKey(v); setDgStatus("idle"); }} placeholder="Your Deepgram API key" />
+          </div>
+          <div className="flex items-center gap-3">
+            <Button variant="primary" size="sm" onClick={validateDeepgramKey} disabled={!dgKey || dgStatus === "checking"}>
+              {dgStatus === "checking" ? "Connecting…" : "Connect"}
+            </Button>
+            {dgStatus === "ok" && (
+              <span className="text-sm text-emerald-400 flex items-center gap-1">
+                <Check size={14} /> Connected{dgCredit ? ` — ${dgCredit} credit` : ""}
+              </span>
+            )}
+            {dgStatus === "bad" && <span className="text-sm text-red-400 flex items-center gap-1"><X size={14} /> Couldn't connect — check the key</span>}
+          </div>
+          {dgStatus === "member" && (
+            <div className="flex gap-2 rounded-xl border border-red-500/40 bg-red-500/10 p-2.5">
+              <X size={15} className="text-red-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-fg/90">
+                That's a <span className="font-medium">Member</span> key — it transcribes, but can't read your credit. Go back to
+                Deepgram, create a new key with <span className="font-medium">Owner</span> (or Admin) permission, and paste it above.
+              </p>
+            </div>
+          )}
+        </Card>
+      )}
 
       {engine === "groq" && (
         <Card className="space-y-3 animate-scale-in">
@@ -214,11 +305,11 @@ export default function Onboarding() {
 
     /* 3 — Speech model */
     <div key="m" className="space-y-4">
-      <h2 className="text-xl font-semibold">{engine === "groq" ? "Choose an offline fallback model" : "Choose a speech model"}</h2>
+      <h2 className="text-xl font-semibold">{engine === "local" ? "Choose a speech model" : "Choose an offline fallback model"}</h2>
       <p className="text-sm text-muted">
-        {engine === "groq"
-          ? "Used automatically if the cloud service is ever unreachable. Downloads on first use."
-          : "Downloads automatically on first use. \"Small\" is the sweet spot for most PCs."}
+        {engine === "local"
+          ? "Downloads automatically on first use. \"Small\" is the sweet spot for most PCs."
+          : "Used automatically if the cloud service is ever unreachable. Downloads on first use."}
       </p>
       <div className="space-y-2">
         {MODELS.map((m) => (
