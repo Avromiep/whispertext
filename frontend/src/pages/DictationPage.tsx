@@ -49,17 +49,19 @@ export default function DictationPage() {
           value={t.method}
           onChange={(v) => patch({ typing: { method: v } })}
           options={[
-            { value: "auto", label: "Auto (recommended) — keystrokes, paste for long text" },
+            { value: "auto", label: "Auto (recommended) — paste via clipboard" },
             { value: "keystrokes", label: "Always simulate keystrokes" },
             { value: "clipboard", label: "Always paste via clipboard" },
           ]}
           label="Insertion method"
         />
+        <p className="text-[11px] text-muted mt-2">
+          Paste inserts the whole text at once — fast and reliable everywhere. Choose keystrokes
+          only for an app that ignores Ctrl+V (some terminals); it types character by character.
+        </p>
         <div className="mt-4 space-y-3">
-          <Slider label="Typing speed" min={50} max={1000} step={25} value={t.chars_per_second}
+          <Slider label="Typing speed (keystrokes mode)" min={50} max={1000} step={25} value={t.chars_per_second}
             format={(v) => `${v} chars/s`} onChange={(v) => patch({ typing: { chars_per_second: v } })} />
-          <Slider label="Instant-paste threshold" min={0} max={1000} step={50} value={t.instant_paste_threshold}
-            format={(v) => `${v} chars`} onChange={(v) => patch({ typing: { instant_paste_threshold: v } })} />
           <Slider label="Pre-type delay" min={0} max={500} step={10} value={t.pre_type_delay_ms}
             format={(v) => `${v} ms`} onChange={(v) => patch({ typing: { pre_type_delay_ms: v } })} />
         </div>

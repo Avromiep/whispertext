@@ -3,6 +3,18 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.38] — 2026-08-08
+
+### Changed
+- **Dictated text is now inserted by pasting (one clipboard paste) by default,
+  instead of simulating keystrokes.** Per-character injection could flood
+  Windows' low-level keyboard hooks on fast or long text — dropping letters and
+  leaving a character "stuck" auto-repeating (the runaway "……" that needed a
+  spacebar tap to recover, seen in Notepad). Pasting is atomic, so the text goes
+  in cleanly every time. You can still pick "Always simulate keystrokes" in
+  Dictation settings for the rare app that ignores Ctrl+V. This supersedes the
+  1.0.37 hook-pause mitigation, which reduced but didn't eliminate the problem.
+
 ## [1.0.37] — 2026-08-08
 
 ### Fixed

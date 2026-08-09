@@ -1,15 +1,19 @@
 """Text injection engine.
 
-Primary: Windows SendInput with KEYEVENTF_UNICODE. Characters are delivered
-as literal text (virtual-key 0), which means:
-  * held modifier keys (Win/Shift/Ctrl from the hotkey) can NOT combine with
-    the injected characters to trigger shortcuts (no accidental Win+I, etc.);
-  * any character types correctly — capitals, curly quotes, em dashes,
-    non-Latin scripts — with no Shift simulation and no alt-code fallbacks;
-  * input is batched per SendInput call, so it's fast and smooth.
+Default (method "auto"): clipboard paste — a single Ctrl+V regardless of length.
+It's atomic, so it can't drop characters or leave a key "stuck" auto-repeating,
+the way per-character injection does once it floods the OS input queue and the
+global low-level keyboard hooks (the `keyboard` library keeps its own hook, so
+every synthesized keystroke is still processed by it — under that load a key-up
+can be lost and Windows then auto-repeats the character).
 
-Fallback: clipboard + Ctrl-V (with clipboard restore) — also auto-selected
-for long texts. Last resort: leave text on the clipboard and notify.
+Optional (method "keystrokes"): Windows SendInput with KEYEVENTF_UNICODE. Each
+character is delivered as literal text (virtual-key 0), so held hotkey modifiers
+can't combine with it and any glyph types correctly (capitals, curly quotes, em
+dashes, non-Latin scripts). Useful for the rare app that ignores Ctrl+V, at the
+cost of reliability on fast/long text.
+
+Last resort: leave the text on the clipboard and notify.
 """
 from __future__ import annotations
 
@@ -125,7 +129,10 @@ class TypingService:
         try:
             method = s.method
             if method == "auto":
-                method = "clipboard" if len(text) > s.instant_paste_threshold else "keystrokes"
+                # Paste, not keystrokes: atomic and immune to the dropped-key-up /
+                # runaway-auto-repeat failure that per-character injection hits in
+                # fast apps. Users who need literal keystrokes can still pick them.
+                method = "clipboard"
 
             if method == "keystrokes":
                 try:
