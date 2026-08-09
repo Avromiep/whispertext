@@ -75,8 +75,11 @@ class HotkeyService:
         with self._lock:
             if event.event_type == "down":
                 self._down.add(name)
-                # Push-to-talk: fire once when the full combo is first held.
-                if not self._ptt_active and combo and combo <= self._down:
+                # Push-to-talk: fire once when EXACTLY the combo is held — no
+                # extra keys. Using == (not subset <=) means Win+Shift+Ctrl does
+                # not trigger a Win+Shift binding, so the combo can't fire as a
+                # side effect of a larger shortcut the user meant for another app.
+                if not self._ptt_active and combo and combo == self._down:
                     self._ptt_active = True
                     self._dispatch(self.on_ptt_start)
                 # Double-tap detection for hands-free toggle (skippable).

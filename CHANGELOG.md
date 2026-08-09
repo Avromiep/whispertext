@@ -3,6 +3,15 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.36] — 2026-08-08
+
+### Fixed
+- **Push-to-talk now requires the exact key combo.** Holding extra keys along
+  with the shortcut — e.g. Win+Shift+Ctrl when the binding is Win+Shift — no
+  longer starts recording, so the shortcut can't fire as a side effect of a
+  larger chord you meant for another app. Once recording, adding a key mid-hold
+  still keeps going; releasing a combo key stops it as before.
+
 ## [1.0.35] — 2026-08-07
 
 ### Changed
