@@ -110,7 +110,9 @@ class DictationPipeline:
     def _start_deepgram(self, cfg) -> None:
         """Open a live Deepgram stream and feed the mic to it as we record, so
         the transcript is nearly ready by the time the key is released."""
-        rate = audio_service._capture_rate or cfg.audio.sample_rate
+        # getattr: a mic that hasn't reported its native rate yet (or a test
+        # double) falls back to the configured sample rate rather than crashing.
+        rate = getattr(audio_service, "_capture_rate", None) or cfg.audio.sample_rate
         session = deepgram_service.make_live(
             cfg.whisper.deepgram_model, rate, cfg.whisper.language, cfg.vocabulary.words)
         if session is None:

@@ -3,6 +3,17 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.37] — 2026-08-08
+
+### Fixed
+- **Typing into apps (e.g. Notepad) no longer slows down partway through or
+  inserts stray/garbled characters.** WhisperText now silences its own global
+  keyboard hook while it synthesizes text. Previously every injected keystroke
+  re-entered the hook (a settings lookup per character); because a low-level
+  keyboard hook runs synchronously and blocks all keyboard input until it
+  returns, that per-key work throttled injection and could trip Windows' hook
+  timeout — which is what corrupted fast input.
+
 ## [1.0.36] — 2026-08-08
 
 ### Fixed

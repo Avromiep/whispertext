@@ -397,6 +397,16 @@ class TestHandsFree:
     RATE = 16000
     FIXTURES = Path(__file__).parent / "fixtures"
 
+    @pytest.fixture(autouse=True)
+    def _isolate_settings(self, monkeypatch):
+        """Drive these tests with a controlled (default) engine rather than the
+        developer's real settings.json. A saved cloud engine would send the
+        scripted mock mic down a live-streaming path it doesn't implement, and
+        tests must never depend on — or touch — the user's real settings."""
+        import backend.services.pipeline as pl
+        from backend.models.settings import Settings
+        monkeypatch.setattr(pl, "load_settings", lambda: Settings())
+
     def _speech(self, peak=0.3):
         with wave.open(str(self.FIXTURES / "speech_sentence_16k.wav"), "rb") as w:
             pcm = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)

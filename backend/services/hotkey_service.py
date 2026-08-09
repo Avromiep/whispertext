@@ -61,6 +61,15 @@ class HotkeyService:
 
     def set_paused(self, paused: bool) -> None:
         self._paused = paused
+        if paused:
+            # Forget any in-flight key state. While paused we ignore events, so a
+            # key-up that happens during the pause is never seen; clearing here
+            # means it can't act on resume (spuriously stop, or leave a phantom
+            # key that blocks the next exact-combo match).
+            with self._lock:
+                self._down.clear()
+                self._ptt_active = False
+                self._tap_armed = False
         log.info("Hotkeys %s", "paused" if paused else "resumed")
 
     # ------------------------------------------------------------------- events

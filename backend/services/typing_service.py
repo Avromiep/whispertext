@@ -22,6 +22,7 @@ import pyperclip
 
 from backend.models.settings import load_settings
 from backend.services.event_bus import bus
+from backend.services.hotkey_service import hotkey_service
 from backend.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -114,18 +115,28 @@ class TypingService:
         self._wait_for_modifier_release()
         time.sleep(max(0, s.pre_type_delay_ms) / 1000)
 
-        method = s.method
-        if method == "auto":
-            method = "clipboard" if len(text) > s.instant_paste_threshold else "keystrokes"
+        # Silence our own global keyboard hook for the duration of injection.
+        # Otherwise every synthesized keystroke re-enters hotkey_service._on_event
+        # (a settings lookup per character). A low-level keyboard hook runs
+        # synchronously and stalls all keyboard input until it returns, so that
+        # per-key work throttles injection and can trip Windows' hook timeout —
+        # the cause of typing that slows down and drops/garbles characters.
+        hotkey_service.set_paused(True)
+        try:
+            method = s.method
+            if method == "auto":
+                method = "clipboard" if len(text) > s.instant_paste_threshold else "keystrokes"
 
-        if method == "keystrokes":
-            try:
-                self._type_unicode(text, s.chars_per_second)
-                return "keystrokes"
-            except OSError as exc:
-                log.warning("Unicode injection failed (%s); using clipboard", exc)
+            if method == "keystrokes":
+                try:
+                    self._type_unicode(text, s.chars_per_second)
+                    return "keystrokes"
+                except OSError as exc:
+                    log.warning("Unicode injection failed (%s); using clipboard", exc)
 
-        return self._paste(text, restore=s.restore_clipboard)
+            return self._paste(text, restore=s.restore_clipboard)
+        finally:
+            hotkey_service.set_paused(False)
 
     # ------------------------------------------------------------------ typing
     @staticmethod
