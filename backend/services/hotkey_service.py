@@ -39,6 +39,21 @@ _KEYEVENTF_KEYUP = 0x0002
 # low-level hook still sees it — so it's a safe liveness canary.
 _CANARY_VK = 0xE8
 
+# Modifier families and the virtual-keys (L/R) that count as that family held.
+# Matching reads live state via GetAsyncKeyState, so a stale key left in the
+# tracked set by a missed key-up can neither wedge the combo (dead hotkey) nor
+# count as a phantom "extra" that blocks it.
+_FAMILY_VKS = {
+    "win":   (0x5B, 0x5C),
+    "shift": (0xA0, 0xA1),
+    "ctrl":  (0xA2, 0xA3),
+    "alt":   (0xA4, 0xA5),
+}
+_NAME_FAMILY = {
+    "windows": "win", "shift": "shift", "alt": "alt",
+    "left ctrl": "ctrl", "right ctrl": "ctrl", "ctrl": "ctrl",
+}
+
 
 def _norm(name: str) -> str:
     return _ALIASES.get(name.lower(), name.lower())
@@ -112,6 +127,32 @@ class HotkeyService:
                 self._tap_armed = False
         log.info("Hotkeys %s", "paused" if paused else "resumed")
 
+    # --------------------------------------------------------- live key state
+    def _async_down(self, vk: int) -> bool:
+        return bool(ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000)
+
+    def _family_held(self, family: str) -> bool:
+        return any(self._async_down(vk) for vk in _FAMILY_VKS[family])
+
+    def _combo_held(self, combo: set[str]) -> bool:
+        """Is every key of the combo physically down right now? Modifier keys are
+        read from live state (immune to a missed key-up); any non-modifier key
+        falls back to the tracked set."""
+        for key in combo:
+            fam = _NAME_FAMILY.get(key)
+            if fam is not None:
+                if not self._family_held(fam):
+                    return False
+            elif key not in self._down:
+                return False
+        return True
+
+    def _extra_modifier_held(self, combo: set[str]) -> bool:
+        """Is a modifier OUTSIDE the combo physically down? (Win+Shift+Ctrl must
+        not fire a Win+Shift binding.) Live state, so a phantom can't block it."""
+        allowed = {_NAME_FAMILY[k] for k in combo if k in _NAME_FAMILY}
+        return any(self._family_held(f) for f in _FAMILY_VKS if f not in allowed)
+
     # ------------------------------------------------------------------- events
     def _on_event(self, event: keyboard.KeyboardEvent) -> None:
         self._last_seen = time.monotonic()    # liveness heartbeat (before any early return)
@@ -124,11 +165,14 @@ class HotkeyService:
         with self._lock:
             if event.event_type == "down":
                 self._down.add(name)
-                # Push-to-talk: fire once when EXACTLY the combo is held — no
-                # extra keys. Using == (not subset <=) means Win+Shift+Ctrl does
-                # not trigger a Win+Shift binding, so the combo can't fire as a
-                # side effect of a larger shortcut the user meant for another app.
-                if not self._ptt_active and combo and combo == self._down:
+                # Push-to-talk: fire when a combo key completes the chord and the
+                # WHOLE combo is physically held with no extra modifier. Checking
+                # live key state (not set equality on tracked keys) means a stale
+                # key from a missed key-up can't leave the combo un-matchable —
+                # the bug that left the hotkey dead until an app restart.
+                if (not self._ptt_active and combo and name in combo
+                        and self._combo_held(combo)
+                        and not self._extra_modifier_held(combo)):
                     self._ptt_active = True
                     self._dispatch(self.on_ptt_start)
                 # Double-tap detection for hands-free toggle (skippable).
@@ -144,7 +188,7 @@ class HotkeyService:
                     self._tap_armed = False  # any other key breaks the double-tap
             else:  # key up
                 self._down.discard(name)
-                if self._ptt_active and not (combo <= self._down):
+                if self._ptt_active and not self._combo_held(combo):
                     self._ptt_active = False
                     self._dispatch(self.on_ptt_stop)
 
@@ -159,10 +203,18 @@ class HotkeyService:
         while not self._watchdog_stop.wait(_WATCHDOG_INTERVAL_S):
             try:
                 self.refresh_config()
-                # Only probe when idle: paused (typing) or keys held would make
-                # the check ambiguous, and the hook is plainly alive then anyway.
-                if self._paused or self._down:
+                if self._paused:
                     continue
+                # Rescue a recording stuck on a missed key-up: if we think we're
+                # holding but the combo isn't physically down, end it.
+                if self._ptt_active and not self._combo_held(self._combo):
+                    with self._lock:
+                        was_active, self._ptt_active = self._ptt_active, False
+                    if was_active:
+                        self._dispatch(self.on_ptt_stop)
+                    continue
+                if self._ptt_active:
+                    continue   # actively recording — the hook is obviously alive
                 if not self._hook_alive():
                     log.warning("Hotkey hook stopped responding — reinstalling")
                     self._reinstall_hook()

@@ -3,6 +3,18 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.40] — 2026-08-09
+
+### Fixed
+- **Push-to-talk could stop responding even when pressing only the shortcut
+  keys.** The "don't trigger if extra keys are held" check compared a running
+  tally of key events; if a key-up was ever missed (which Windows does under
+  load, and which also caused the occasional recording that wouldn't stop), a
+  phantom key stayed in the tally and the combo could never match again — dead
+  until an app restart. Matching now reads **live key state**, so a dropped
+  key-up can't wedge the combo or masquerade as an extra key. A recording stuck
+  on a missed release is also ended automatically by the hotkey watchdog.
+
 ## [1.0.39] — 2026-08-09
 
 ### Fixed

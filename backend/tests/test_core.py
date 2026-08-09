@@ -613,6 +613,8 @@ class TestHotkeys:
         monkeypatch.setattr(hm, "load_settings", lambda: Settings())
         svc = HotkeyService()
         svc.refresh_config()             # load cached bindings the hook callback reads
+        held = {"win", "shift"}          # stand in for live GetAsyncKeyState
+        svc._family_held = lambda fam: fam in held
         events = []
         svc.on_ptt_start = lambda: events.append("start")
         svc.on_ptt_stop = lambda: events.append("stop")
@@ -623,6 +625,7 @@ class TestHotkeys:
 
         svc._on_event(Ev("left windows", "down"))
         svc._on_event(Ev("left shift", "down"))
+        held.discard("shift")
         svc._on_event(Ev("left shift", "up"))
         time.sleep(0.15)
         assert events == ["start", "stop"]
