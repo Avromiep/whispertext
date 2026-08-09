@@ -3,6 +3,18 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.39] — 2026-08-09
+
+### Fixed
+- **The global hotkey could silently stop working after the app had been
+  running a while.** Windows can drop a low-level keyboard hook — across a
+  lock/unlock, a UAC prompt, or sleep/resume — with no error, and the hook
+  never came back until you restarted the app. The hotkey service now watchdogs
+  its hook and automatically reinstalls it if it stops responding, so
+  push-to-talk and hands-free keep working. The hook callback was also made
+  lighter (it no longer reads settings on every keystroke — that's cached and
+  refreshed on change) to reduce the chance Windows drops it in the first place.
+
 ## [1.0.38] — 2026-08-08
 
 ### Changed

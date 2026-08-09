@@ -66,6 +66,7 @@ async def get_settings() -> dict:
 @router.patch("/settings")
 async def patch_settings(patch: dict) -> dict:
     updated = update_settings(patch)
+    hotkey_service.refresh_config()   # pick up a rebind immediately, not on the next watchdog tick
     bus.publish("settings_changed", {})
     return updated.model_dump()
 

@@ -592,6 +592,7 @@ class TestHotkeys:
         # double-tap detection itself, not the user's actual saved prefs.
         monkeypatch.setattr(hm, "load_settings", lambda: Settings())
         svc = HotkeyService()
+        svc.refresh_config()             # load cached bindings the hook callback reads
         fired = []
         svc.on_toggle = lambda: fired.append(1)
 
@@ -611,6 +612,7 @@ class TestHotkeys:
         import backend.services.hotkey_service as hm
         monkeypatch.setattr(hm, "load_settings", lambda: Settings())
         svc = HotkeyService()
+        svc.refresh_config()             # load cached bindings the hook callback reads
         events = []
         svc.on_ptt_start = lambda: events.append("start")
         svc.on_ptt_stop = lambda: events.append("stop")
@@ -632,6 +634,7 @@ class TestHotkeys:
         s.hotkeys.hands_free_enabled = False
         monkeypatch.setattr(hm, "load_settings", lambda: s)
         svc = HotkeyService()
+        svc.refresh_config()             # load cached bindings the hook callback reads
         fired = []
         svc.on_toggle = lambda: fired.append(1)
 
