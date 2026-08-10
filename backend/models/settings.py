@@ -45,6 +45,10 @@ class AudioSettings(BaseModel):
     auto_gain: bool = True
     silence_trimming: bool = True
     vad_enabled: bool = False
+    # Keep the mic stream open between dictations so recording starts instantly
+    # (opening a cold device costs 0.2-1.3s, which clips the first words). The
+    # stream auto-releases after a short idle. Turn off to open on demand.
+    keep_mic_warm: bool = True
 
 
 class WhisperSettings(BaseModel):

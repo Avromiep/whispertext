@@ -3,6 +3,18 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.41] — 2026-08-10
+
+### Fixed
+- **The start of a dictation could be clipped** — press the hotkey, start
+  talking, and the first word(s) wouldn't be captured. Opening the microphone
+  device costs 0.2–1.3s on some machines, and the app reopened it for *every*
+  dictation, so capture didn't actually begin until that finished (and the
+  overlay only appeared afterward). The mic stream is now kept **warm** between
+  dictations, so recording starts instantly. It auto-releases the mic after a
+  few minutes idle; you can turn this off in Audio settings ("Keep microphone
+  ready") to open the device only while recording.
+
 ## [1.0.40] — 2026-08-09
 
 ### Fixed

@@ -87,6 +87,9 @@ export default function AudioPage() {
           checked={a.silence_trimming} onChange={(v) => patch({ audio: { silence_trimming: v } })} />
         <Toggle label="Voice activity detection" description="Filter non-speech segments during transcription"
           checked={a.vad_enabled} onChange={(v) => patch({ audio: { vad_enabled: v } })} />
+        <Toggle label="Keep microphone ready"
+          description="Recording starts instantly instead of clipping your first words. The mic stays active between dictations and releases after a few minutes idle. Turn off to open it only while recording."
+          checked={a.keep_mic_warm} onChange={(v) => patch({ audio: { keep_mic_warm: v } })} />
       </Section>
 
       <Section title="Format">
