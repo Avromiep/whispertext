@@ -75,6 +75,39 @@ def test_extra_key_after_combo_keeps_recording(monkeypatch):
     assert calls["stop"] == 1
 
 
+def _make_toggle(monkeypatch, clock):
+    s = Settings(hotkeys=HotkeySettings(push_to_talk="windows+shift",
+                                        hands_free_enabled=True, toggle_key="right ctrl"))
+    monkeypatch.setattr(hk_mod, "load_settings", lambda: s)
+    monkeypatch.setattr(hk_mod.time, "monotonic", lambda: clock["t"])
+    svc = HotkeyService()
+    svc.refresh_config()
+    fired: list = []
+    svc.on_toggle = lambda: fired.append(1)
+    svc._dispatch = lambda cb: cb()
+    return svc, fired
+
+
+def test_doubled_event_does_not_read_as_double_tap(monkeypatch):
+    clock = {"t": 100.0}
+    svc, fired = _make_toggle(monkeypatch, clock)
+    # A doubled hook delivers the SAME right-ctrl down twice at ~the same instant.
+    svc._on_event(_evt("right ctrl", "down"))
+    svc._on_event(_evt("right ctrl", "down"))
+    assert fired == []                          # deduped — not a real double-tap
+
+
+def test_real_double_tap_still_fires(monkeypatch):
+    clock = {"t": 100.0}
+    svc, fired = _make_toggle(monkeypatch, clock)
+    svc._on_event(_evt("right ctrl", "down"))
+    clock["t"] += 0.002
+    svc._on_event(_evt("right ctrl", "up"))
+    clock["t"] += 0.150                          # second tap 150 ms later
+    svc._on_event(_evt("right ctrl", "down"))
+    assert fired == [1]
+
+
 def test_event_updates_liveness_heartbeat(monkeypatch):
     svc, _, _ = _make(monkeypatch)
     svc._last_seen = 0.0

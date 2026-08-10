@@ -35,6 +35,15 @@ _ALIASES = {
 
 _WATCHDOG_INTERVAL_S = 10.0
 _KEYEVENTF_KEYUP = 0x0002
+# The same physical key can't fire two identical events this close together — a
+# real double-tap is 100ms+, auto-repeat 30ms+ — so an identical event within
+# this window is a duplicate delivery (e.g. from a doubled hook) and is dropped.
+# This makes hook duplication harmless: a single press can never read as a
+# double-tap, and a combo can't fire twice.
+_DEDUP_WINDOW_S = 0.010
+# Cap hook reinstalls so a mis-firing liveness probe can't spawn listeners without
+# bound; recovery needs only a couple of tries, and dedup covers any that linger.
+_MAX_REINSTALLS = 3
 # An unassigned virtual-key: apps ignore a stray key-up for it, but a live
 # low-level hook still sees it — so it's a safe liveness canary.
 _CANARY_VK = 0xE8
@@ -76,6 +85,10 @@ class HotkeyService:
         self._last_seen = 0.0                 # heartbeat: last time _on_event ran
         self._watchdog: threading.Thread | None = None
         self._watchdog_stop = threading.Event()
+        self._dedup_key: tuple | None = None  # (name, event_type) of the last event
+        self._dedup_t = 0.0
+        self._canary_fails = 0                # consecutive liveness-probe misses
+        self._reinstalls = 0                  # total hook reinstalls this run (capped)
         # Cached hotkey config, refreshed off the hot path so the hook callback
         # never does a settings-file read (that per-event work was a stall risk).
         self._combo: set[str] = set()
@@ -155,9 +168,18 @@ class HotkeyService:
 
     # ------------------------------------------------------------------- events
     def _on_event(self, event: keyboard.KeyboardEvent) -> None:
-        self._last_seen = time.monotonic()    # liveness heartbeat (before any early return)
+        now = time.monotonic()
+        self._last_seen = now                 # liveness heartbeat (before any early return)
         if self._paused or event.name is None:
             return
+        # Drop a duplicate delivery of the same event (e.g. if a hook ever got
+        # doubled) so one physical press is never processed twice — otherwise a
+        # single tap could register as a double-tap and fire recording.
+        ev_key = (event.name, event.event_type)
+        if ev_key == self._dedup_key and (now - self._dedup_t) < _DEDUP_WINDOW_S:
+            return
+        self._dedup_key = ev_key
+        self._dedup_t = now
         name = _norm(event.name)
         combo = self._combo
         toggle_key = self._toggle_key
@@ -174,12 +196,14 @@ class HotkeyService:
                         and self._combo_held(combo)
                         and not self._extra_modifier_held(combo)):
                     self._ptt_active = True
+                    log.info("push-to-talk fired by %r (down=%s)", name, sorted(self._down))
                     self._dispatch(self.on_ptt_start)
                 # Double-tap detection for hands-free toggle (skippable).
                 if self._hands_free_enabled and name == toggle_key:
                     now = time.monotonic()
                     if self._tap_armed and (now - self._last_tap) * 1000 <= self._double_tap_ms:
                         self._tap_armed = False
+                        log.info("hands-free toggle fired by double-tap %r", name)
                         self._dispatch(self.on_toggle)
                     else:
                         self._tap_armed = True
@@ -215,8 +239,17 @@ class HotkeyService:
                     continue
                 if self._ptt_active:
                     continue   # actively recording — the hook is obviously alive
-                if not self._hook_alive():
-                    log.warning("Hotkey hook stopped responding — reinstalling")
+                if self._hook_alive():
+                    self._canary_fails = 0
+                    continue
+                # Require two misses in a row before reinstalling: a single flaky
+                # probe shouldn't churn the hook. Cap total reinstalls so a probe
+                # that never registers can't spawn listeners without bound.
+                self._canary_fails += 1
+                if self._canary_fails >= 2 and self._reinstalls < _MAX_REINSTALLS:
+                    log.warning("Hotkey hook not responding (x%d) — reinstalling", self._canary_fails)
+                    self._reinstalls += 1
+                    self._canary_fails = 0
                     self._reinstall_hook()
             except Exception:
                 log.exception("Hotkey watchdog error")

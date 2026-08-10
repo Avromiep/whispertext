@@ -3,6 +3,19 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.42] — 2026-08-10
+
+### Fixed
+- **Recording could start unexpectedly while running an unrelated macro** (and
+  briefly put its transcription on your clipboard). The hook watchdog added a
+  few versions ago could reinstall the global keyboard hook while the old one
+  was still active, so each keystroke was processed twice — enough to make a
+  single key-press read as a double-tap and fire hands-free recording. Key
+  events are now de-duplicated, so a doubled hook can't cause a phantom
+  double-tap or fire a combo twice; hook reinstalls are also capped and only
+  happen after repeated misses. Added logging of what triggers a recording, to
+  pin down any remaining cases.
+
 ## [1.0.41] — 2026-08-10
 
 ### Fixed

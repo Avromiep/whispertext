@@ -1,7 +1,7 @@
 {
   "name": "whispertext",
   "productName": "WhisperText",
-  "version": "1.0.41",
+  "version": "1.0.42",
   "description": "AI voice dictation for every application",
   "main": "electron/main.cjs",
   "type": "module",
