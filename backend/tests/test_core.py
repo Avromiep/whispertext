@@ -502,6 +502,35 @@ class TestVocabulary:
     def test_empty_vocabulary_is_noop(self):
         assert apply_vocabulary_casing("nothing changes here", []) == "nothing changes here"
 
+    # A term that is letters+digits must match however STT renders the number.
+    ALNUM = ["rapp02", "Rapp05", "Rapp10", "rapp11", "rapp12"]
+
+    @pytest.mark.parametrize("text,expected", [
+        ("rapp11", "rapp11"),                       # already exact
+        ("rapp 11", "rapp11"),                       # split off with a space
+        ("rapp eleven", "rapp11"),                   # spelled out
+        ("rapp 1 1", "rapp11"),                       # spaced digits
+        ("rapp twelve", "rapp12"),
+        ("rapp 12", "rapp12"),
+        ("rapp ten", "Rapp10"),                      # exact casing preserved
+        ("rapp 10", "Rapp10"),
+        ("Rapp eleven", "rapp11"),                   # letters matched case-insensitively
+        ("RAPP 11", "rapp11"),
+        ("rapp oh two", "rapp02"),                   # leading-zero said "oh two"
+        ("rapp02", "rapp02"),
+        ("rapp oh five", "Rapp05"),
+        ("the server rapp eleven is down", "the server rapp11 is down"),
+        ("rapp 11 then rapp 12", "rapp11 then rapp12"),
+    ])
+    def test_alnum_number_forms(self, text, expected):
+        assert apply_vocabulary_casing(text, self.ALNUM) == expected
+
+    @pytest.mark.parametrize("text", ["rapport", "wrapp 11", "rapp two"])
+    def test_alnum_no_false_positives(self, text):
+        # "rapp two" must NOT become rapp02 (that's said "oh two"); a term must
+        # not fire inside a larger word ("rapport", "wrapp 11").
+        assert apply_vocabulary_casing(text, self.ALNUM) == text
+
 
 # --------------------------------------------------------------- resampling
 class TestResampling:

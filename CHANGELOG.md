@@ -3,6 +3,18 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.43] — 2026-08-10
+
+### Fixed
+- **Vocabulary terms ending in a number now type correctly regardless of how
+  speech-to-text writes the number.** A term like "rapp11" is matched whether it
+  comes through glued ("rapp11"), split with a space ("rapp 11"), spelled out
+  ("rapp eleven"), or said digit-by-digit ("rapp oh two") — and is rewritten to
+  your exact term with its exact casing (e.g. "Rapp10"). Before, only the glued
+  form was recognized, so "rapp11" spoken "rapp eleven" came out as "rapp 11" or
+  "rapp eleven". (Terms with a leading zero, said "rapp oh two", already worked
+  and still do.)
+
 ## [1.0.42] — 2026-08-10
 
 ### Fixed
