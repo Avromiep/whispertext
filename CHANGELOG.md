@@ -3,6 +3,18 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.44] — 2026-08-12
+
+### Fixed
+- **WhisperText no longer keeps your monitor from going to sleep.** The hotkey
+  watchdog probes its keyboard hook with a tiny injected keystroke every 10
+  seconds (to detect and recover a hook Windows silently dropped). Windows
+  counts *any* injected input as user activity, so that probe kept resetting the
+  display-sleep timer and the monitor never turned off. The probe now pauses
+  once you've been idle (~30s with no real keyboard input and no mouse activity),
+  letting the display sleep — and resumes the instant you return via keyboard or
+  mouse, so a dropped hook is still recovered before you reach for push-to-talk.
+
 ## [1.0.43] — 2026-08-10
 
 ### Fixed

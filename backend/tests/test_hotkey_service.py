@@ -108,6 +108,39 @@ def test_real_double_tap_still_fires(monkeypatch):
     assert fired == [1]
 
 
+def test_canary_probes_when_keyboard_recently_active():
+    svc = HotkeyService()
+    svc._last_real_input = 100.0
+    assert svc._skip_probe_when_idle(now=105.0) is False   # 5s idle — keep probing
+
+
+def test_canary_suppressed_when_user_is_idle():
+    svc = HotkeyService()
+    svc._last_real_input = 100.0
+    svc._os_idle_seconds = lambda: 999.0                   # OS idle too
+    assert svc._skip_probe_when_idle(now=131.0) is True    # crossed cutoff — suspend
+    assert svc._skip_probe_when_idle(now=145.0) is True    # still idle — stay suspended
+
+
+def test_canary_resumes_on_os_input_after_idle():
+    svc = HotkeyService()
+    svc._last_real_input = 100.0
+    svc._os_idle_seconds = lambda: 999.0
+    assert svc._skip_probe_when_idle(now=131.0) is True     # suspended at t=131
+    svc._os_idle_seconds = lambda: 0.5                      # a mouse move just happened
+    assert svc._skip_probe_when_idle(now=140.0) is False    # OS input since suspend — resume
+
+
+def test_real_key_marks_activity_but_canary_does_not(monkeypatch):
+    svc, _, _ = _make(monkeypatch)
+    svc._last_real_input = 0.0
+    svc._on_event(_evt("a", "down"))
+    assert svc._last_real_input > 0.0                       # real key = activity
+    svc._last_real_input = 0.0
+    svc._on_event(types.SimpleNamespace(name=None, event_type="up"))  # the canary
+    assert svc._last_real_input == 0.0                      # canary is NOT activity
+
+
 def test_event_updates_liveness_heartbeat(monkeypatch):
     svc, _, _ = _make(monkeypatch)
     svc._last_seen = 0.0

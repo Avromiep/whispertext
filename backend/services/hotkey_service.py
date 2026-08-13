@@ -47,6 +47,16 @@ _MAX_REINSTALLS = 3
 # An unassigned virtual-key: apps ignore a stray key-up for it, but a live
 # low-level hook still sees it — so it's a safe liveness canary.
 _CANARY_VK = 0xE8
+# Windows counts ANY injected input as user activity, so the canary keeps
+# resetting the display-sleep timer and the monitor never turns off. Once the
+# user has been idle this long, stop injecting so the screen can sleep. Injected
+# input can't be exempted from the idle timer, so not-injecting is the only way.
+# Must be well under any sane display timeout.
+_PROBE_IDLE_CUTOFF_S = 30.0
+
+
+class _LASTINPUTINFO(ctypes.Structure):
+    _fields_ = (("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint))
 
 # Modifier families and the virtual-keys (L/R) that count as that family held.
 # Matching reads live state via GetAsyncKeyState, so a stale key left in the
@@ -89,6 +99,8 @@ class HotkeyService:
         self._dedup_t = 0.0
         self._canary_fails = 0                # consecutive liveness-probe misses
         self._reinstalls = 0                  # total hook reinstalls this run (capped)
+        self._last_real_input = time.monotonic()  # last REAL key (canary excluded)
+        self._idle_since: float | None = None     # when we suspended the canary probe
         # Cached hotkey config, refreshed off the hot path so the hook callback
         # never does a settings-file read (that per-event work was a stall risk).
         self._combo: set[str] = set()
@@ -172,6 +184,9 @@ class HotkeyService:
         self._last_seen = now                 # liveness heartbeat (before any early return)
         if self._paused or event.name is None:
             return
+        # A real key (the canary has name None, so it's already excluded above).
+        # Marks genuine user activity so the watchdog can stop injecting when idle.
+        self._last_real_input = now
         # Drop a duplicate delivery of the same event (e.g. if a hook ever got
         # doubled) so one physical press is never processed twice — otherwise a
         # single tap could register as a double-tap and fire recording.
@@ -223,6 +238,37 @@ class HotkeyService:
         threading.Thread(target=cb, daemon=True).start()
 
     # ---------------------------------------------------------------- watchdog
+    def _os_idle_seconds(self) -> float:
+        """Seconds since the last system-wide input (keyboard OR mouse) per
+        Windows' GetLastInputInfo. Our own canary counts toward this too, so it
+        only means 'no real input' once we've stopped injecting."""
+        info = _LASTINPUTINFO()
+        info.cbSize = ctypes.sizeof(info)
+        if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info)):
+            return 0.0
+        tick = ctypes.windll.kernel32.GetTickCount() & 0xFFFFFFFF
+        return max(0.0, ((tick - info.dwTime) & 0xFFFFFFFF) / 1000.0)
+
+    def _skip_probe_when_idle(self, now: float) -> bool:
+        """True when the liveness canary should be suppressed because the user is
+        idle — so it stops resetting the display-sleep timer and the monitor can
+        turn off.
+
+        Keyboard idle (`_last_real_input`) is the clean trigger to stop, since it
+        excludes our own canary. Once suspended we no longer inject, so the OS
+        idle clock runs clean; if it shows input arriving AFTER we suspended (a
+        mouse move the keyboard hook can't see), we resume — so a hook that died
+        while idle is still reinstalled before the user reaches for push-to-talk."""
+        if now - self._last_real_input < _PROBE_IDLE_CUTOFF_S:
+            self._idle_since = None                       # keyboard active — keep probing
+            return False
+        if self._idle_since is None:
+            self._idle_since = now                        # keyboard just went idle — suspend
+        elif self._os_idle_seconds() < now - self._idle_since:
+            self._idle_since = None                       # real OS input since — resume
+            return False
+        return True
+
     def _watchdog_loop(self) -> None:
         while not self._watchdog_stop.wait(_WATCHDOG_INTERVAL_S):
             try:
@@ -239,6 +285,8 @@ class HotkeyService:
                     continue
                 if self._ptt_active:
                     continue   # actively recording — the hook is obviously alive
+                if self._skip_probe_when_idle(time.monotonic()):
+                    continue   # user idle — don't inject, so the display can sleep
                 if self._hook_alive():
                     self._canary_fails = 0
                     continue
