@@ -85,10 +85,20 @@ async def balance(provider_id: str = PROVIDER_ID) -> dict:
         return {"ok": False, "message": str(exc)}
 
 
+# Deepgram ends a segment (and drops a terminal period) after this much silence.
+# Its ~10ms default treats every little dictation pause as a sentence end, which
+# is why natural speech came out as many one-clause "sentences" (and lone words
+# like "Sometimes."). Waiting for a real ~0.8s pause groups a whole thought into
+# one segment it can punctuate coherently. Segments still finalize DURING the
+# hold (real-time), so releasing the key stays instant — only the last short
+# segment is flushed on release.
+_ENDPOINTING_MS = 800
+
+
 def _ws_url(model: str, sample_rate: int, language: str, keyterms: list[str]) -> str:
     params = [("model", model), ("encoding", "linear16"), ("sample_rate", str(sample_rate)),
               ("channels", "1"), ("punctuate", "true"), ("smart_format", "true"),
-              ("interim_results", "false")]
+              ("interim_results", "false"), ("endpointing", str(_ENDPOINTING_MS))]
     if language and language != "auto":
         params.append(("language", language))
     for kt in keyterms or []:

@@ -3,6 +3,17 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.45] — 2026-08-12
+
+### Changed
+- **Deepgram dictation no longer turns every pause into its own sentence.**
+  Deepgram was ending a segment after only ~10ms of silence and putting a period
+  at the end of each, so natural speech came out as many one-clause "sentences"
+  (and lone words like "Sometimes." on their own). It now waits for a real
+  ~0.8s pause before ending a segment, grouping a whole thought into one
+  properly-punctuated sentence. Segments still finalize while you talk, so
+  releasing the hotkey stays instant.
+
 ## [1.0.44] — 2026-08-12
 
 ### Fixed
