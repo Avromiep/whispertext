@@ -532,6 +532,30 @@ class TestVocabulary:
         assert apply_vocabulary_casing(text, self.ALNUM) == text
 
 
+# ---------------------------------------------------- per-window sentence layout
+class TestSentenceLayout:
+    @pytest.mark.parametrize("text,expected", [
+        ("One. Two. Three.", "One.\n\nTwo.\n\nThree."),
+        ("Hello there! How are you? Good.", "Hello there!\n\nHow are you?\n\nGood."),
+        ("Single sentence.", "Single sentence."),
+        ("Pi is 3.14 today.", "Pi is 3.14 today."),   # decimal isn't a boundary
+        ("", ""),
+    ])
+    def test_split(self, text, expected):
+        from backend.utils.text import sentences_on_separate_lines
+        assert sentences_on_separate_lines(text) == expected
+
+    def test_window_layout_only_for_matching_title(self, monkeypatch):
+        import backend.services.pipeline as pl
+        from backend.models.settings import FormattingSettings, Settings
+        s = Settings(formatting=FormattingSettings(sentence_per_line_titles=["Gmail"]))
+        monkeypatch.setattr(pl, "load_settings", lambda: s)
+        layout = pl.DictationPipeline._apply_window_layout
+        assert layout("One. Two.", "Inbox - Gmail — Chrome") == "One.\n\nTwo."   # matches
+        assert layout("One. Two.", "Untitled - Notepad") == "One. Two."          # no match
+        assert layout("One. Two.", None) == "One. Two."                          # no title
+
+
 # --------------------------------------------------------------- resampling
 class TestResampling:
     """Native-rate capture (any mic) is downsampled to 16 kHz in software, so

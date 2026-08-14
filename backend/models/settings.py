@@ -115,6 +115,11 @@ class FormattingSettings(BaseModel):
     smart_paragraphs: bool = True
     spoken_punctuation: bool = True          # "comma" -> "," / "new paragraph" -> \n\n
     spoken_lists: bool = True                # "bullet point" -> "- "
+    # When the active window/tab TITLE contains one of these (case-insensitive),
+    # put each sentence on its own line with a blank line between — e.g. a site
+    # you dictate into. Matched on the title because the browser doesn't expose
+    # the tab URL to other apps.
+    sentence_per_line_titles: list[str] = Field(default_factory=list)
 
 
 class VocabularySettings(BaseModel):

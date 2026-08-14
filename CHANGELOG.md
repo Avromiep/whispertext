@@ -3,6 +3,16 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.46] — 2026-08-12
+
+### Added
+- **Per-tab sentence layout** (Dictation → Per-tab layout). List tab titles, one
+  per line; when you dictate into a browser tab whose title contains one of them,
+  each sentence is placed on its own line with a blank line between. It's matched
+  on the tab's **title** (the browser doesn't expose the tab's URL to other apps),
+  so use a word from the title — the site or page name (e.g. "Gmail", "Notion",
+  a document's name).
+
 ## [1.0.45] — 2026-08-12
 
 ### Changed

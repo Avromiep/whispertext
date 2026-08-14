@@ -4,6 +4,24 @@ import { useEffect, useState } from "react";
 import { useSettings } from "../hooks/useSettings";
 import { PageHeader, Section, Select, Slider, Toggle } from "../components/ui";
 
+/** One tab-title phrase per line. Local state so typing (incl. blank lines)
+ * isn't disrupted; the stored setting is the trimmed, non-empty lines. */
+function TitleList({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const [text, setText] = useState(value.join("\n"));
+  return (
+    <textarea
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value);
+        onChange(e.target.value.split("\n").map((s) => s.trim()).filter(Boolean));
+      }}
+      rows={3}
+      placeholder={"Gmail\nNotion\nMy Journal"}
+      className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-mono resize-y focus:border-accent outline-none"
+    />
+  );
+}
+
 export default function DictationPage() {
   const { settings, patch } = useSettings();
   const [languages, setLanguages] = useState<Record<string, string>>({ auto: "Auto-detect" });
@@ -42,6 +60,17 @@ export default function DictationPage() {
           checked={f.spoken_punctuation} onChange={(v) => patch({ formatting: { spoken_punctuation: v } })} />
         <Toggle label="Spoken lists" description={'"bullet point" → • · "number one" → 1.'}
           checked={f.spoken_lists} onChange={(v) => patch({ formatting: { spoken_lists: v } })} />
+      </Section>
+
+      <Section title="Per-tab layout" description="Format differently depending on which browser tab you're dictating into — matched by the tab's title, since the app can't read the tab's URL.">
+        <div className="text-sm font-medium">One sentence per line</div>
+        <p className="text-[11px] text-muted mt-0.5 mb-2">
+          When the active tab's title contains one of these (one per line), each sentence is put on its
+          own line with a blank line between. Use a word from the tab's title — the site or page name,
+          e.g. "Gmail", "Notion", or a document's name.
+        </p>
+        <TitleList value={f.sentence_per_line_titles}
+          onChange={(v) => patch({ formatting: { sentence_per_line_titles: v } })} />
       </Section>
 
       <Section title="Typing" description="How the final text is inserted at your cursor.">

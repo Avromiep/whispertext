@@ -23,7 +23,7 @@ from backend.storage.database import HistoryStore
 from backend.utils import encryption
 from backend.utils.logger import get_logger
 from backend.utils.text import (apply_vocabulary_casing, build_vocabulary_prompt,
-                                 is_silence_hallucination)
+                                 is_silence_hallucination, sentences_on_separate_lines)
 
 log = get_logger(__name__)
 
@@ -230,6 +230,9 @@ class DictationPipeline:
             # neither AI cleanup nor auto-capitalize can re-case them.
             final_text = apply_vocabulary_casing(
                 final_text, load_settings().vocabulary.words)
+            # Per-window layout: for configured tabs (matched by title), lay each
+            # sentence on its own line. Runs last, on the fully-formed text.
+            final_text = self._apply_window_layout(final_text, target_app)
             if ai.error:
                 bus.notify("AI cleanup unavailable — inserted raw transcription.",
                            "warning")
@@ -324,6 +327,17 @@ class DictationPipeline:
         text = text.strip()
         if text and f.auto_capitalize:
             text = text[0].upper() + text[1:]
+        return text
+
+    @staticmethod
+    def _apply_window_layout(text: str, window_title: str) -> str:
+        """If the active window/tab title matches a configured phrase, put each
+        sentence on its own line (blank line between). Title-matched because the
+        browser doesn't expose the tab URL to us."""
+        titles = load_settings().formatting.sentence_per_line_titles
+        hay = (window_title or "").lower()
+        if any(t.strip() and t.strip().lower() in hay for t in titles):
+            return sentences_on_separate_lines(text)
         return text
 
 

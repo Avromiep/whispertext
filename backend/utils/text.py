@@ -14,6 +14,17 @@ def strip_trailing_ellipsis(text: str) -> str:
     return _TRAILING_ELLIPSIS.sub("", text)
 
 
+# Split after sentence-ending punctuation followed by whitespace. A decimal like
+# "3.14" has no space after the dot, so it isn't split.
+_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
+
+
+def sentences_on_separate_lines(text: str) -> str:
+    """Put each sentence on its own line, with a blank line between them."""
+    parts = [p.strip() for p in _SENTENCE_BOUNDARY.split(text.strip()) if p.strip()]
+    return "\n\n".join(parts)
+
+
 # Whisper was trained on captioned video, so when handed audio with no speech
 # it tends to emit a stock filler or caption boilerplate rather than nothing.
 # These are only ever discarded when the audio was too quiet to contain speech
