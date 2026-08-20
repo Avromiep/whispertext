@@ -23,7 +23,8 @@ from backend.storage.database import HistoryStore
 from backend.utils import encryption
 from backend.utils.logger import get_logger
 from backend.utils.text import (apply_vocabulary_casing, build_vocabulary_prompt,
-                                 is_silence_hallucination, sentences_on_separate_lines)
+                                 fix_numeral_idioms, is_silence_hallucination,
+                                 sentences_on_separate_lines)
 
 log = get_logger(__name__)
 
@@ -326,6 +327,9 @@ class DictationPipeline:
         """Deterministic post-fixes independent of the LLM."""
         f = load_settings().formatting
         text = text.strip()
+        if f.numbers_as_digits:
+            # numerals digit-ified pronoun "one" too ("1 of them") — put it back.
+            text = fix_numeral_idioms(text)
         if text and f.auto_capitalize:
             text = text[0].upper() + text[1:]
         return text

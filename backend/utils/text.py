@@ -19,6 +19,39 @@ def strip_trailing_ellipsis(text: str) -> str:
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
 
 
+# "one" is the only number word that's also a pronoun/article, so Deepgram's
+# numerals turns "one of them" into "1 of them". These put the WORD back while
+# leaving genuine counts ("1 dog", "3 of them", "chapter 1", "type 1") as digits.
+def _one_cased(text: str, at: int) -> str:
+    """'One' if the match is sentence-initial, else 'one'."""
+    j = at - 1
+    while j >= 0 and text[j] in " \t":
+        j -= 1
+    return "One" if j < 0 or text[j] in ".!?\n" else "one"
+
+
+# A "1" that's really "one" because of what FOLLOWS it (pronoun/idiom).
+_ONE_BEFORE = re.compile(
+    r"\b1(?=\s+(?:of|another|and\s+only|and\s+the\s+same|or\s+the\s+other|"
+    r"at\s+a\s+time|after\s+another|after\s+the\s+other)\b)", re.IGNORECASE)
+# A "1" that's really "one" because of the determiner/adjective BEFORE it.
+_ONE_AFTER = re.compile(
+    r"\b(no|the|this|that|which|each|every|any|another|other|little|big|loved|dear|"
+    r"young|old|good|new|main|real|whole|right|wrong|first|last|next|only)\s+1\b",
+    re.IGNORECASE)
+# "one by one" / "one on one" — both digits become the word.
+_ONE_PAIR = re.compile(r"\b1(\s+(?:by|on)\s+)1\b", re.IGNORECASE)
+
+
+def fix_numeral_idioms(text: str) -> str:
+    """Undo digit-ification of "one" where it's a pronoun/article, not a count.
+    No-op on text that has no such "1" (e.g. word-based engine output)."""
+    text = _ONE_BEFORE.sub(lambda m: _one_cased(m.string, m.start()), text)
+    text = _ONE_PAIR.sub(lambda m: _one_cased(m.string, m.start()) + m.group(1) + "one", text)
+    text = _ONE_AFTER.sub(lambda m: m.group(1) + " one", text)
+    return text
+
+
 def sentences_on_separate_lines(text: str) -> str:
     """Put each sentence on its own line, with a blank line between them."""
     parts = [p.strip() for p in _SENTENCE_BOUNDARY.split(text.strip()) if p.strip()]

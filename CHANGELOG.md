@@ -3,6 +3,17 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.48] — 2026-08-12
+
+### Fixed
+- **"Numbers as digits" no longer mangles the word "one."** With digits on,
+  Deepgram was turning pronoun/article uses of "one" into "1" too ("one of them"
+  → "1 of them", "no one" → "no 1"). Those stay the word "one" now — covering
+  "one of…", "no one", "the/this/that/which/each one", "one another", "one by
+  one", "one on one", "one at a time", "one and only", and descriptive uses like
+  "a loved one" or "the last one" — while genuine counts stay digits ("1 dog",
+  "3 of them", "chapter 1", "type 1").
+
 ## [1.0.47] — 2026-08-12
 
 ### Added

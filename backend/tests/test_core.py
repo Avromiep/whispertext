@@ -532,6 +532,37 @@ class TestVocabulary:
         assert apply_vocabulary_casing(text, self.ALNUM) == text
 
 
+# --------------------------------------------------- numeral-idiom reversion
+class TestNumeralIdioms:
+    @pytest.mark.parametrize("text,expected", [
+        # pronoun/article "one" -> put the word back
+        ("I need 1 of them", "I need one of them"),   # mid-sentence -> lowercase
+        ("1 of them", "One of them"),                  # sentence-initial -> capital
+        ("no 1 knows", "no one knows"),
+        ("the 1 thing", "the one thing"),
+        ("that 1", "that one"),
+        ("which 1 do you want", "which one do you want"),
+        ("1 another", "One another"),
+        ("1 by 1", "One by one"),
+        ("a 1 on 1 meeting", "a one on one meeting"),
+        ("the 1 and only", "the one and only"),
+        ("a loved 1", "a loved one"),
+        ("the last 1", "the last one"),
+        # sentence-initial keeps the capital
+        ("1 of them. 1 of us.", "One of them. One of us."),
+        # genuine counts stay digits
+        ("I have 1 dog", "I have 1 dog"),
+        ("3 of them", "3 of them"),
+        ("2 of us", "2 of us"),
+        ("chapter 1", "chapter 1"),
+        ("type 1 diabetes", "type 1 diabetes"),
+        ("room 1 and 1 of them", "room 1 and one of them"),
+    ])
+    def test_fix(self, text, expected):
+        from backend.utils.text import fix_numeral_idioms
+        assert fix_numeral_idioms(text) == expected
+
+
 # ---------------------------------------------------- per-window sentence layout
 class TestSentenceLayout:
     @pytest.mark.parametrize("text,expected", [
