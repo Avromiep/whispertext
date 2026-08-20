@@ -115,6 +115,9 @@ class FormattingSettings(BaseModel):
     smart_paragraphs: bool = True
     spoken_punctuation: bool = True          # "comma" -> "," / "new paragraph" -> \n\n
     spoken_lists: bool = True                # "bullet point" -> "- "
+    # Force spoken numbers to digits (three -> 3). Deepgram's smart_format spells
+    # out small numbers per writing style; this overrides that via its `numerals`.
+    numbers_as_digits: bool = True
     # When the active window/tab TITLE contains one of these (case-insensitive),
     # put each sentence on its own line with a blank line between — e.g. a site
     # you dictate into. Matched on the title because the browser doesn't expose

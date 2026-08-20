@@ -95,10 +95,15 @@ async def balance(provider_id: str = PROVIDER_ID) -> dict:
 _ENDPOINTING_MS = 800
 
 
-def _ws_url(model: str, sample_rate: int, language: str, keyterms: list[str]) -> str:
+def _ws_url(model: str, sample_rate: int, language: str, keyterms: list[str],
+            numerals: bool = True) -> str:
     params = [("model", model), ("encoding", "linear16"), ("sample_rate", str(sample_rate)),
               ("channels", "1"), ("punctuate", "true"), ("smart_format", "true"),
               ("interim_results", "false"), ("endpointing", str(_ENDPOINTING_MS))]
+    if numerals:
+        # Force spoken numbers to digits (three -> 3); smart_format alone spells
+        # small numbers out per writing style.
+        params.append(("numerals", "true"))
     if language and language != "auto":
         params.append(("language", language))
     for kt in keyterms or []:
@@ -114,9 +119,10 @@ class DeepgramLive:
     returns the full transcript."""
 
     def __init__(self, key: str, model: str, sample_rate: int,
-                 language: str = "auto", keyterms: list[str] | None = None) -> None:
+                 language: str = "auto", keyterms: list[str] | None = None,
+                 numerals: bool = True) -> None:
         self._key = key
-        self._url = _ws_url(model, sample_rate, language, keyterms or [])
+        self._url = _ws_url(model, sample_rate, language, keyterms or [], numerals)
         self._q: queue.Queue = queue.Queue()   # thread-safe: audio thread -> loop
         self._finals: list[str] = []
         self._ws = None
@@ -200,12 +206,13 @@ class DeepgramLive:
 
 
 def make_live(model: str, sample_rate: int, language: str,
-              keyterms: list[str] | None = None) -> DeepgramLive | None:
+              keyterms: list[str] | None = None,
+              numerals: bool = True) -> DeepgramLive | None:
     """A live session if a key is configured, else None (caller falls back)."""
     key = get_api_key(PROVIDER_ID)
     if not key:
         return None
-    return DeepgramLive(key, model or DEFAULT_MODEL, sample_rate, language, keyterms)
+    return DeepgramLive(key, model or DEFAULT_MODEL, sample_rate, language, keyterms, numerals)
 
 
 def result(text: str, language: str) -> TranscriptionResult:

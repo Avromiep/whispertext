@@ -3,6 +3,15 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.47] — 2026-08-12
+
+### Added
+- **Numbers as digits** (Dictation → Cleanup & formatting, on by default).
+  Spoken numbers now come out as digits — "three" → 3, "twenty three" → 23 —
+  instead of Deepgram's smart-format style that spells out small numbers. It uses
+  Deepgram's `numerals` flag, so it happens during transcription with no added
+  latency. Toggle it off if you'd rather have prose numbers.
+
 ## [1.0.46] — 2026-08-12
 
 ### Added

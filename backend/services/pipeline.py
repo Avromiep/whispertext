@@ -114,7 +114,8 @@ class DictationPipeline:
         # double) falls back to the configured sample rate rather than crashing.
         rate = getattr(audio_service, "_capture_rate", None) or cfg.audio.sample_rate
         session = deepgram_service.make_live(
-            cfg.whisper.deepgram_model, rate, cfg.whisper.language, cfg.vocabulary.words)
+            cfg.whisper.deepgram_model, rate, cfg.whisper.language, cfg.vocabulary.words,
+            numerals=cfg.formatting.numbers_as_digits)
         if session is None:
             return  # no Deepgram key — transcription will fall back to Groq/local
         self._dg_session = session

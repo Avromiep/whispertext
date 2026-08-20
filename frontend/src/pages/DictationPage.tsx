@@ -60,6 +60,8 @@ export default function DictationPage() {
           checked={f.spoken_punctuation} onChange={(v) => patch({ formatting: { spoken_punctuation: v } })} />
         <Toggle label="Spoken lists" description={'"bullet point" → • · "number one" → 1.'}
           checked={f.spoken_lists} onChange={(v) => patch({ formatting: { spoken_lists: v } })} />
+        <Toggle label="Numbers as digits" description={'Spoken numbers become digits: "three" → 3, "twenty three" → 23'}
+          checked={f.numbers_as_digits} onChange={(v) => patch({ formatting: { numbers_as_digits: v } })} />
       </Section>
 
       <Section title="Per-tab layout" description="Format differently depending on which browser tab you're dictating into — matched by the tab's title, since the app can't read the tab's URL.">
