@@ -562,6 +562,28 @@ class TestNumeralIdioms:
         from backend.utils.text import fix_numeral_idioms
         assert fix_numeral_idioms(text) == expected
 
+    @pytest.mark.parametrize("text,expected", [
+        # ordinals -> words in prose
+        ("the 3rd time", "the third time"),
+        ("give me a 2nd", "give me a second"),
+        ("on 2nd thought", "on second thought"),
+        ("he came in 1st", "he came in first"),
+        ("we took 1st place", "we took first place"),   # mid-sentence -> lowercase
+        ("1st place", "First place"),                    # sentence-initial -> capital
+        ("Henry the 8th", "Henry the eighth"),
+        ("the 21st amendment", "the twenty first amendment"),
+        # sentence-initial keeps the capital
+        ("1st, let's begin", "First, let's begin"),
+        # dates keep the digit ordinal
+        ("January 1st", "January 1st"),
+        ("on May 3rd we met", "on May 3rd we met"),
+        ("the 1st of March", "the 1st of March"),
+        ("Dec 25th", "Dec 25th"),
+    ])
+    def test_ordinals(self, text, expected):
+        from backend.utils.text import fix_ordinal_idioms
+        assert fix_ordinal_idioms(text) == expected
+
 
 # ---------------------------------------------------- per-window sentence layout
 class TestSentenceLayout:

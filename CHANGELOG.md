@@ -3,6 +3,15 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.49] — 2026-08-12
+
+### Changed
+- **Ordinals read as words in prose, digits in dates.** "first", "second",
+  "third" (etc.) now come out as words — "first of all", "the third time",
+  "give me a second", "Henry the eighth", "we took first place" — instead of
+  "1st"/"2nd"/"3rd", while dates keep the digit form ("January 1st", "1st of
+  March", "Dec 25th"). Sentence-initial ones stay capitalized ("First, …").
+
 ## [1.0.48] — 2026-08-12
 
 ### Fixed

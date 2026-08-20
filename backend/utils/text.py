@@ -22,12 +22,19 @@ _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
 # "one" is the only number word that's also a pronoun/article, so Deepgram's
 # numerals turns "one of them" into "1 of them". These put the WORD back while
 # leaving genuine counts ("1 dog", "3 of them", "chapter 1", "type 1") as digits.
-def _one_cased(text: str, at: int) -> str:
-    """'One' if the match is sentence-initial, else 'one'."""
+def _sentence_initial(text: str, at: int) -> bool:
     j = at - 1
     while j >= 0 and text[j] in " \t":
         j -= 1
-    return "One" if j < 0 or text[j] in ".!?\n" else "one"
+    return j < 0 or text[j] in ".!?\n"
+
+
+def _cap(word: str, text: str, at: int) -> str:
+    return word[0].upper() + word[1:] if _sentence_initial(text, at) else word
+
+
+def _one_cased(text: str, at: int) -> str:
+    return _cap("one", text, at)
 
 
 # A "1" that's really "one" because of what FOLLOWS it (pronoun/idiom).
@@ -50,6 +57,49 @@ def fix_numeral_idioms(text: str) -> str:
     text = _ONE_PAIR.sub(lambda m: _one_cased(m.string, m.start()) + m.group(1) + "one", text)
     text = _ONE_AFTER.sub(lambda m: m.group(1) + " one", text)
     return text
+
+
+# Ordinals read better as words in prose ("first of all", "give me a second"),
+# but Deepgram writes them as "1st"/"2nd". Spell them out — except in dates,
+# where the digit form is wanted ("January 1st", "1st of March").
+_ORD_ONES = ["", "first", "second", "third", "fourth", "fifth",
+             "sixth", "seventh", "eighth", "ninth"]
+_ORD_TEENS = ["tenth", "eleventh", "twelfth", "thirteenth", "fourteenth", "fifteenth",
+              "sixteenth", "seventeenth", "eighteenth", "nineteenth"]
+_ORD_TENS = ["", "", "twentieth", "thirtieth", "fortieth", "fiftieth", "sixtieth",
+             "seventieth", "eightieth", "ninetieth"]
+_TENS_PREFIX = ["", "", "twenty", "thirty", "forty", "fifty", "sixty",
+                "seventy", "eighty", "ninety"]
+_MONTHS = (r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?"
+           r"|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)")
+_ORDINAL = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)\b", re.IGNORECASE)
+
+
+def _ordinal_word(n: int) -> str | None:
+    if not 1 <= n <= 99:
+        return None
+    if n < 10:
+        return _ORD_ONES[n]
+    if n < 20:
+        return _ORD_TEENS[n - 10]
+    tens, ones = divmod(n, 10)
+    return _ORD_TENS[tens] if ones == 0 else f"{_TENS_PREFIX[tens]} {_ORD_ONES[ones]}"
+
+
+def fix_ordinal_idioms(text: str) -> str:
+    """Spell "1st"/"2nd"/... as words in prose, but keep the digit form in a date
+    context (next to a month, or "of {month}"). No-op if there are no digit
+    ordinals."""
+    def repl(m: re.Match) -> str:
+        word = _ordinal_word(int(m.group(1)))
+        if word is None:
+            return m.group(0)
+        before = text[max(0, m.start() - 12):m.start()].lower()
+        after = text[m.end():m.end() + 16].lower()
+        if re.search(_MONTHS + r"\s*$", before) or re.match(r"\s+of\s+" + _MONTHS + r"\b", after):
+            return m.group(0)   # date — keep the digit ordinal
+        return _cap(word, text, m.start())
+    return _ORDINAL.sub(repl, text)
 
 
 def sentences_on_separate_lines(text: str) -> str:
