@@ -35,6 +35,7 @@ def test_exact_combo_triggers_and_releases(monkeypatch):
     held |= {"win", "shift"}
     svc._on_event(_evt("left windows", "down"))
     svc._on_event(_evt("left shift", "down"))
+    svc._ptt_commit()                          # chord window elapses, only combo held
     assert calls["start"] == 1
     held.discard("shift")                     # let go of shift
     svc._on_event(_evt("left shift", "up"))
@@ -47,6 +48,7 @@ def test_extra_modifier_does_not_trigger(monkeypatch):
     svc._on_event(_evt("left ctrl", "down"))
     svc._on_event(_evt("left windows", "down"))
     svc._on_event(_evt("left shift", "down"))
+    svc._ptt_commit()
     assert calls["start"] == 0                # Ctrl is an extra modifier
 
 
@@ -58,18 +60,31 @@ def test_stale_tracked_key_does_not_block(monkeypatch):
     held |= {"win", "shift"}
     svc._on_event(_evt("left windows", "down"))
     svc._on_event(_evt("left shift", "down"))
+    svc._ptt_commit()
     assert calls["start"] == 1
 
 
-def test_extra_key_after_combo_keeps_recording(monkeypatch):
+def test_extra_key_during_window_cancels(monkeypatch):
+    """Win+Shift+T (e.g. PowerToys) must NOT start recording — a key joining the
+    combo within the chord window means it's a bigger shortcut, not dictation."""
     svc, calls, held = _make(monkeypatch)
     held |= {"win", "shift"}
     svc._on_event(_evt("left windows", "down"))
     svc._on_event(_evt("left shift", "down"))
+    svc._on_event(_evt("t", "down"))           # extra key within the window
+    svc._ptt_commit()
+    assert calls["start"] == 0                 # canceled
+
+
+def test_extra_key_after_recording_keeps_recording(monkeypatch):
+    svc, calls, held = _make(monkeypatch)
+    held |= {"win", "shift"}
+    svc._on_event(_evt("left windows", "down"))
+    svc._on_event(_evt("left shift", "down"))
+    svc._ptt_commit()
     assert calls["start"] == 1
-    held.add("ctrl")                          # extra key mid-hold
-    svc._on_event(_evt("left ctrl", "down"))
-    assert calls["stop"] == 0                  # still recording (combo still held)
+    svc._on_event(_evt("t", "down"))           # extra key AFTER recording began
+    assert calls["stop"] == 0                  # keeps recording
     held.discard("win")
     svc._on_event(_evt("left windows", "up"))  # drop a combo key
     assert calls["stop"] == 1

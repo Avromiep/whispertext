@@ -3,6 +3,16 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.50] — 2026-08-23
+
+### Fixed
+- **Push-to-talk no longer fires when another key is pressed with the combo.**
+  If you press a key together with your Win+Shift shortcut — e.g. Win+Shift+T
+  for a PowerToys tool — WhisperText now recognizes it's a different shortcut and
+  doesn't start recording. It waits a hair (~60ms) after the combo to see whether
+  another key joins; if one does, it stays quiet. Previously only extra *modifier*
+  keys were ignored, not ordinary keys like "T".
+
 ## [1.0.49] — 2026-08-12
 
 ### Changed

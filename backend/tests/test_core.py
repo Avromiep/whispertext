@@ -731,6 +731,7 @@ class TestHotkeys:
 
         svc._on_event(Ev("left windows", "down"))
         svc._on_event(Ev("left shift", "down"))
+        svc._ptt_commit()                # chord window elapses with only the combo
         held.discard("shift")
         svc._on_event(Ev("left shift", "up"))
         time.sleep(0.15)

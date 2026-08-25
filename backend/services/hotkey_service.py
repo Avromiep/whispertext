@@ -44,6 +44,10 @@ _DEDUP_WINDOW_S = 0.010
 # Cap hook reinstalls so a mis-firing liveness probe can't spawn listeners without
 # bound; recovery needs only a couple of tries, and dedup covers any that linger.
 _MAX_REINSTALLS = 3
+# After the push-to-talk combo is held, wait this long before actually starting.
+# If another key joins in that window it's a larger shortcut (e.g. Win+Shift+T),
+# not dictation, so recording is skipped. Short enough to feel instant.
+_PTT_CHORD_WINDOW_S = 0.06
 # An unassigned virtual-key: apps ignore a stray key-up for it, but a live
 # low-level hook still sees it — so it's a safe liveness canary.
 _CANARY_VK = 0xE8
@@ -101,6 +105,8 @@ class HotkeyService:
         self._reinstalls = 0                  # total hook reinstalls this run (capped)
         self._last_real_input = time.monotonic()  # last REAL key (canary excluded)
         self._idle_since: float | None = None     # when we suspended the canary probe
+        self._ptt_pending = False                 # combo held, waiting out the chord window
+        self._ptt_timer: threading.Timer | None = None
         # Cached hotkey config, refreshed off the hot path so the hook callback
         # never does a settings-file read (that per-event work was a stall risk).
         self._combo: set[str] = set()
@@ -146,6 +152,7 @@ class HotkeyService:
             # key-up that happens during the pause is never seen; clearing here
             # means it can't act on resume (spuriously stop, or leave a phantom
             # key that blocks the next exact-combo match).
+            self._cancel_pending_ptt()
             with self._lock:
                 self._down.clear()
                 self._ptt_active = False
@@ -202,17 +209,21 @@ class HotkeyService:
         with self._lock:
             if event.event_type == "down":
                 self._down.add(name)
-                # Push-to-talk: fire when a combo key completes the chord and the
-                # WHOLE combo is physically held with no extra modifier. Checking
-                # live key state (not set equality on tracked keys) means a stale
-                # key from a missed key-up can't leave the combo un-matchable —
-                # the bug that left the hotkey dead until an app restart.
-                if (not self._ptt_active and combo and name in combo
+                # Push-to-talk: when a combo key completes the chord (whole combo
+                # physically held, no extra modifier), don't fire immediately —
+                # arm a short timer. If another key joins within the window it's a
+                # bigger shortcut (e.g. Win+Shift+T for PowerToys), not dictation,
+                # so cancel. Live key state (not the tracked set) is used so a
+                # stale key from a missed key-up can't wedge the combo.
+                if (not self._ptt_active and not self._ptt_pending and combo and name in combo
                         and self._combo_held(combo)
                         and not self._extra_modifier_held(combo)):
-                    self._ptt_active = True
-                    log.info("push-to-talk fired by %r (down=%s)", name, sorted(self._down))
-                    self._dispatch(self.on_ptt_start)
+                    self._ptt_pending = True
+                    self._ptt_timer = threading.Timer(_PTT_CHORD_WINDOW_S, self._ptt_commit)
+                    self._ptt_timer.daemon = True
+                    self._ptt_timer.start()
+                elif self._ptt_pending and name not in combo:
+                    self._cancel_pending_ptt()   # extra key -> a chord, not dictation
                 # Double-tap detection for hands-free toggle (skippable).
                 if self._hands_free_enabled and name == toggle_key:
                     now = time.monotonic()
@@ -227,6 +238,8 @@ class HotkeyService:
                     self._tap_armed = False  # any other key breaks the double-tap
             else:  # key up
                 self._down.discard(name)
+                if self._ptt_pending and not self._combo_held(combo):
+                    self._cancel_pending_ptt()   # released before the window elapsed
                 if self._ptt_active and not self._combo_held(combo):
                     self._ptt_active = False
                     self._dispatch(self.on_ptt_stop)
@@ -236,6 +249,26 @@ class HotkeyService:
         # Never block the low-level hook thread — Windows will drop the hook
         # if the callback stalls, so real work happens on a worker thread.
         threading.Thread(target=cb, daemon=True).start()
+
+    def _cancel_pending_ptt(self) -> None:
+        self._ptt_pending = False
+        if self._ptt_timer is not None:
+            self._ptt_timer.cancel()
+            self._ptt_timer = None
+
+    def _ptt_commit(self) -> None:
+        """Fires after the chord window with no extra key — start recording."""
+        with self._lock:
+            if not self._ptt_pending:
+                return
+            self._ptt_pending = False
+            self._ptt_timer = None
+            if not (self._combo and self._combo_held(self._combo)
+                    and not self._extra_modifier_held(self._combo)):
+                return   # combo released or an extra modifier joined during the wait
+            self._ptt_active = True
+        log.info("push-to-talk fired (down=%s)", sorted(self._down))
+        self._dispatch(self.on_ptt_start)
 
     # ---------------------------------------------------------------- watchdog
     def _os_idle_seconds(self) -> float:
@@ -331,6 +364,7 @@ class HotkeyService:
         try:
             self._hook = keyboard.hook(self._on_event)
             self._last_seen = time.monotonic()
+            self._cancel_pending_ptt()
             with self._lock:
                 self._down.clear()
                 self._ptt_active = False
