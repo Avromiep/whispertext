@@ -3,6 +3,19 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.52] — 2026-08-30
+
+### Fixed
+- **Recovers automatically when the microphone goes silent mid-session.** The
+  app keeps the mic "warm" between dictations for an instant start; on some
+  machines that persistent stream can go dead after another app grabs the mic or
+  the audio driver glitches — it keeps delivering audio, but pure silence, so
+  every dictation came back "No speech detected" until you restarted the app.
+  WhisperText now detects an all-silent capture and drops the stale stream so the
+  next dictation reopens a fresh, working one on its own. (If it keeps happening,
+  pin your real mic in Settings → Audio and set it as the Windows default so the
+  system can't fall back to a silent virtual mic like a game-streaming input.)
+
 ## [1.0.51] — 2026-08-30
 
 ### Added

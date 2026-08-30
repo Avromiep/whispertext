@@ -689,6 +689,57 @@ class TestCaptureDropDetection:
         assert svc.last_capture["dropped_s"] < 1.0
 
 
+class TestWarmStreamSelfHeal:
+    """A warm capture stream that goes dead delivers pure digital silence while a
+    fresh open of the same device still works; the next dictation must reopen a
+    live stream instead of reusing the dead handle."""
+
+    RATE = 16000
+
+    def _svc(self, monkeypatch, keep_warm=True):
+        import backend.services.audio_service as am
+        from backend.services.audio_service import AudioService
+        from backend.models.settings import AudioSettings, Settings
+        s = Settings(audio=AudioSettings(keep_mic_warm=keep_warm))
+        monkeypatch.setattr(am, "load_settings", lambda: s)
+        svc = AudioService()
+        monkeypatch.setattr(svc, "_post_process",
+                            lambda pcm, capture_rate=None: pcm.astype(np.float32))
+        svc._recording = True
+        svc._stream = object()           # stand-in for an open warm stream
+        svc._capture_rate = self.RATE
+        svc._overflows = 0
+        calls = {"close": 0, "idle": 0}
+        monkeypatch.setattr(svc, "_close_stream_locked",
+                            lambda: calls.__setitem__("close", calls["close"] + 1))
+        monkeypatch.setattr(svc, "_schedule_idle_close_locked",
+                            lambda: calls.__setitem__("idle", calls["idle"] + 1))
+        return svc, calls
+
+    def test_silent_warm_stream_is_dropped(self, monkeypatch):
+        svc, calls = self._svc(monkeypatch)
+        svc._chunks = [np.zeros((3 * self.RATE, 1), dtype=np.int16)]   # 3s pure zeros
+        svc._started_at = time.monotonic() - 3
+        svc.stop()
+        assert calls["close"] == 1 and calls["idle"] == 0             # dead -> reopen
+
+    def test_live_capture_keeps_stream_warm(self, monkeypatch):
+        svc, calls = self._svc(monkeypatch)
+        sig = np.random.default_rng(0).integers(-500, 500, size=(3 * self.RATE, 1)
+                                                ).astype(np.int16)
+        svc._chunks = [sig]                                           # real signal
+        svc._started_at = time.monotonic() - 3
+        svc.stop()
+        assert calls["idle"] == 1 and calls["close"] == 0            # kept warm
+
+    def test_brief_silent_tap_not_treated_as_dead(self, monkeypatch):
+        svc, calls = self._svc(monkeypatch)
+        svc._chunks = [np.zeros((int(0.2 * self.RATE), 1), dtype=np.int16)]  # 0.2s
+        svc._started_at = time.monotonic() - 0.2
+        svc.stop()
+        assert calls["close"] == 0 and calls["idle"] == 1            # too short to judge
+
+
 # --------------------------------------------------------------------- hotkeys
 class TestHotkeys:
     def test_double_tap_detection(self, monkeypatch):

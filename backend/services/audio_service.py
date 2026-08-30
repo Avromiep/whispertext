@@ -32,6 +32,14 @@ WARM_IDLE_S = 180.0
 DROP_WARN_SECONDS = 1.0
 DROP_WARN_MIN_HELD = 2.0
 
+# A persistent (warm) capture stream can silently go dead — the driver keeps
+# delivering blocks but they're pure digital zeros — after the device is briefly
+# grabbed by another app or the old MME interface glitches. A real mic always has
+# a noise floor > 0, so an all-zero capture over a real hold means the warm stream
+# is stale: drop it so the next dictation reopens a fresh, live one. This bound
+# avoids reacting to a momentary tap of the key.
+SILENT_STREAM_MIN_HELD = 0.6
+
 # Loudness alone cannot tell speech from room tone: on a noisy input the noise
 # floor (measured at 0.0113 peak frame RMS on a Steam virtual mic) overlaps
 # quiet speech (0.0126) almost exactly. Silero VAD decides instead — it listens
@@ -324,12 +332,19 @@ class AudioService:
             pcm = (np.concatenate(self._chunks).flatten() if self._chunks
                    else np.zeros(0, dtype=np.int16))
             self._chunks = []
+            # A warm stream that has gone dead delivers pure digital silence
+            # (peak == 0) even though a fresh open of the same device still
+            # captures fine. Detect that and force the stream closed so the next
+            # dictation reopens a live one, instead of reusing the dead handle.
+            peak = int(np.max(np.abs(pcm))) if pcm.size else 0
+            dead_stream = peak == 0 and held >= SILENT_STREAM_MIN_HELD
             # Keep the device warm so the next dictation starts instantly, or
-            # release it now if the user turned that off.
-            if load_settings().audio.keep_mic_warm:
-                self._schedule_idle_close_locked()
-            else:
+            # release it now if the user turned that off — but always drop a
+            # stream that came back silent so it gets reopened fresh.
+            if dead_stream or not load_settings().audio.keep_mic_warm:
                 self._close_stream_locked()
+            else:
+                self._schedule_idle_close_locked()
 
         # Use the rate we actually captured at (may be the mic's native rate).
         capture_rate = self._capture_rate or load_settings().audio.sample_rate
@@ -342,6 +357,11 @@ class AudioService:
             "dropped_pct": round(100 * dropped / held, 1) if held > 0 else 0.0,
             "overflows": overflows, "dropped": is_drop,
         }
+        if dead_stream:
+            log.warning("Warm capture stream returned pure silence (peak=0) over %.1fs held "
+                        "— device likely glitched; dropped the stream so the next dictation "
+                        "reopens a fresh one. device=%s", held,
+                        load_settings().audio.input_device)
         if is_drop:
             log.warning("Audio capture DROPPED %.1fs of %.1fs held (%.0f%%, %d overflow(s)) "
                         "— mic likely glitched or was grabbed by another app. device=%s",
