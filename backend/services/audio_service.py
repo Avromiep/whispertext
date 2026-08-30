@@ -39,6 +39,9 @@ DROP_WARN_MIN_HELD = 2.0
 # is stale: drop it so the next dictation reopens a fresh, live one. This bound
 # avoids reacting to a momentary tap of the key.
 SILENT_STREAM_MIN_HELD = 0.6
+# Below this RMS a capture is treated as dead silence (a live mic's ambient noise
+# floor sits well above it, ~0.002+; digital/dead silence sits near 0).
+SILENT_RMS_EPS = 0.001
 
 # Loudness alone cannot tell speech from room tone: on a noisy input the noise
 # floor (measured at 0.0113 peak frame RMS on a Steam virtual mic) overlaps
@@ -301,6 +304,20 @@ class AudioService:
                 self._stream = None
                 self._stream_device = None
 
+    def _reinit_audio_locked(self) -> None:
+        """Drop the stream and reinitialize PortAudio. After a sleep/resume the
+        device can still 'open' but deliver only silence until the audio backend
+        is refreshed — a fresh process reads the same mic fine. Reinitializing
+        clears that stale state so the next open captures live audio, without the
+        user having to restart the app."""
+        self._close_stream_locked()
+        try:
+            sd._terminate()
+            sd._initialize()
+            log.info("Reinitialized audio backend (PortAudio) after a silent capture")
+        except Exception as exc:
+            log.warning("Audio backend reinit failed: %s", exc)
+
     def _cancel_idle_timer_locked(self) -> None:
         if self._idle_timer is not None:
             self._idle_timer.cancel()
@@ -332,19 +349,21 @@ class AudioService:
             pcm = (np.concatenate(self._chunks).flatten() if self._chunks
                    else np.zeros(0, dtype=np.int16))
             self._chunks = []
-            # A warm stream that has gone dead delivers pure digital silence
-            # (peak == 0) even though a fresh open of the same device still
-            # captures fine. Detect that and force the stream closed so the next
-            # dictation reopens a live one, instead of reusing the dead handle.
-            peak = int(np.max(np.abs(pcm))) if pcm.size else 0
-            dead_stream = peak == 0 and held >= SILENT_STREAM_MIN_HELD
-            # Keep the device warm so the next dictation starts instantly, or
-            # release it now if the user turned that off — but always drop a
-            # stream that came back silent so it gets reopened fresh.
-            if dead_stream or not load_settings().audio.keep_mic_warm:
+            # A dead capture reads as (near-)silence over a real hold even though
+            # a fresh *process* opens the same device fine — classic stale audio
+            # state after the machine sleeps/resumes or a device glitch. A live
+            # mic always has a noise floor (ambient RMS ~0.002+); a dead one sits
+            # near 0. Reopening the stream isn't enough here — PortAudio itself is
+            # stale — so reinitialize the whole audio backend before the next open.
+            rms = (float(np.sqrt(np.mean(pcm.astype(np.float32) ** 2))) / 32768
+                   if pcm.size else 0.0)
+            dead_stream = rms < SILENT_RMS_EPS and held >= SILENT_STREAM_MIN_HELD
+            if dead_stream:
+                self._reinit_audio_locked()
+            elif not load_settings().audio.keep_mic_warm:
                 self._close_stream_locked()
             else:
-                self._schedule_idle_close_locked()
+                self._schedule_idle_close_locked()   # keep warm for an instant next start
 
         # Use the rate we actually captured at (may be the mic's native rate).
         capture_rate = self._capture_rate or load_settings().audio.sample_rate
@@ -358,9 +377,9 @@ class AudioService:
             "overflows": overflows, "dropped": is_drop,
         }
         if dead_stream:
-            log.warning("Warm capture stream returned pure silence (peak=0) over %.1fs held "
-                        "— device likely glitched; dropped the stream so the next dictation "
-                        "reopens a fresh one. device=%s", held,
+            log.warning("Capture came back silent (RMS %.5f) over %.1fs held — stale audio "
+                        "state (e.g. after sleep/resume); reinitialized the audio backend so "
+                        "the next dictation reopens a live mic. device=%s", rms, held,
                         load_settings().audio.input_device)
         if is_drop:
             log.warning("Audio capture DROPPED %.1fs of %.1fs held (%.0f%%, %d overflow(s)) "

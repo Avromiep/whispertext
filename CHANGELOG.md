@@ -3,6 +3,18 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.53] — 2026-08-30
+
+### Fixed
+- **Microphone now recovers by itself after the computer sleeps.** After the PC
+  is idle or asleep for a while, the audio system can go stale — the mic still
+  "opens" but delivers only silence, so every dictation came back "No speech
+  detected" until you restarted the app. WhisperText now detects a silent capture
+  and reinitializes its audio backend automatically, so the next dictation records
+  live again — no restart needed. (Broadens the 1.0.52 self-heal, which only
+  caught exact-digital-silence and only reopened the stream; a post-sleep stale
+  state needs the whole audio backend refreshed.)
+
 ## [1.0.52] — 2026-08-30
 
 ### Fixed

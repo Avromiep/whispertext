@@ -709,19 +709,32 @@ class TestWarmStreamSelfHeal:
         svc._stream = object()           # stand-in for an open warm stream
         svc._capture_rate = self.RATE
         svc._overflows = 0
-        calls = {"close": 0, "idle": 0}
+        calls = {"close": 0, "idle": 0, "reinit": 0}
         monkeypatch.setattr(svc, "_close_stream_locked",
                             lambda: calls.__setitem__("close", calls["close"] + 1))
         monkeypatch.setattr(svc, "_schedule_idle_close_locked",
                             lambda: calls.__setitem__("idle", calls["idle"] + 1))
+        monkeypatch.setattr(svc, "_reinit_audio_locked",
+                            lambda: calls.__setitem__("reinit", calls["reinit"] + 1))
         return svc, calls
 
-    def test_silent_warm_stream_is_dropped(self, monkeypatch):
+    def test_silent_capture_reinitializes_audio(self, monkeypatch):
         svc, calls = self._svc(monkeypatch)
         svc._chunks = [np.zeros((3 * self.RATE, 1), dtype=np.int16)]   # 3s pure zeros
         svc._started_at = time.monotonic() - 3
         svc.stop()
-        assert calls["close"] == 1 and calls["idle"] == 0             # dead -> reopen
+        assert calls["reinit"] == 1 and calls["idle"] == 0            # dead -> reinit
+
+    def test_near_silence_also_reinitializes(self, monkeypatch):
+        svc, calls = self._svc(monkeypatch)
+        # A few tiny non-zero samples (peak != 0) but RMS still ~0 — the case the
+        # old exact-zero check missed.
+        chunk = np.zeros((3 * self.RATE, 1), dtype=np.int16)
+        chunk[::5000] = 2
+        svc._chunks = [chunk]
+        svc._started_at = time.monotonic() - 3
+        svc.stop()
+        assert calls["reinit"] == 1                                   # still detected
 
     def test_live_capture_keeps_stream_warm(self, monkeypatch):
         svc, calls = self._svc(monkeypatch)
@@ -730,14 +743,14 @@ class TestWarmStreamSelfHeal:
         svc._chunks = [sig]                                           # real signal
         svc._started_at = time.monotonic() - 3
         svc.stop()
-        assert calls["idle"] == 1 and calls["close"] == 0            # kept warm
+        assert calls["idle"] == 1 and calls["reinit"] == 0           # kept warm
 
     def test_brief_silent_tap_not_treated_as_dead(self, monkeypatch):
         svc, calls = self._svc(monkeypatch)
         svc._chunks = [np.zeros((int(0.2 * self.RATE), 1), dtype=np.int16)]  # 0.2s
         svc._started_at = time.monotonic() - 0.2
         svc.stop()
-        assert calls["close"] == 0 and calls["idle"] == 1            # too short to judge
+        assert calls["reinit"] == 0 and calls["idle"] == 1          # too short to judge
 
 
 # --------------------------------------------------------------------- hotkeys
