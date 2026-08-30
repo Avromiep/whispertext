@@ -29,7 +29,7 @@ export interface Settings {
 
 export interface ProviderConfig { model: string; base_url: string; temperature: number; max_tokens: number; timeout_s: number }
 export interface ProviderInfo { id: string; name: string; local: boolean; needs_api_key: boolean; configured: boolean; active: boolean; config: ProviderConfig }
-export interface AudioDevice { id: number; name: string; default: boolean; sample_rate: number }
+export interface AudioDevice { id: number; name: string; hostapi?: string; default: boolean; sample_rate: number }
 export interface WhisperModelInfo { name: string; size_mb: number; ram_gb: number; accuracy: number; speed: number; installed: boolean; active: boolean; loaded: boolean; device: string | null }
 export interface HistoryEntry { id: number; ts: number; app: string; raw_transcript: string; final_text: string; duration_s: number; provider: string; language: string; favorite: number }
 export interface SystemInfo { version: string; hardware: { os: string; cpu: string; cpu_cores: number; ram_gb: number; gpu: string | null; vram_gb: number; cuda: boolean; accelerator: string }; recommendations: { tier: string; recommended: string; alternatives: string[]; note: string; whisper_recommendation: string }; languages: Record<string, string> }

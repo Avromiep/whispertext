@@ -3,6 +3,16 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.55] — 2026-08-30
+
+### Changed
+- **The microphone picker now labels each device by audio interface** (WASAPI,
+  MME, DirectSound…). Windows lists the same physical mic several times, once per
+  interface, with identical names — so it was easy to land on the legacy **MME**
+  path, which is prone to cutting out for a second or two mid-dictation ("your mic
+  dropped about 2 seconds of audio"). Pick the **Windows WASAPI** version of your
+  mic for the most reliable capture. A hint under the picker calls this out.
+
 ## [1.0.54] — 2026-08-30
 
 ### Changed

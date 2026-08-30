@@ -61,9 +61,16 @@ export default function AudioPage() {
           onChange={(v) => patch({ audio: { input_device: v === "default" ? null : Number(v) } })}
           options={[
             { value: "default", label: "System default" },
-            ...devices.map((d) => ({ value: String(d.id), label: `${d.name}${d.default ? " (default)" : ""}` })),
+            ...devices.map((d) => ({
+              value: String(d.id),
+              label: `${d.name.trim()}${d.hostapi ? ` — ${d.hostapi}` : ""}${d.default ? " (default)" : ""}`,
+            })),
           ]}
         />
+        <p className="text-[11px] text-muted mt-1.5">
+          If your mic cuts out (dropped audio), pick the <span className="font-medium">Windows WASAPI</span> version
+          of it — the legacy MME interface is more prone to dropouts.
+        </p>
         <div className="mt-4">
           <div className="text-xs text-muted mb-1.5">Input level (live while recording)</div>
           <div className="h-2 rounded-full bg-elevated overflow-hidden">

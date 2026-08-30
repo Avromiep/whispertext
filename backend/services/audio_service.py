@@ -168,9 +168,19 @@ class AudioService:
             default_in = sd.default.device[0]
             for i, d in enumerate(sd.query_devices()):
                 if d["max_input_channels"] > 0:
+                    # The same physical mic is listed once per host API (MME,
+                    # DirectSound, WASAPI, WDM-KS) with an identical name, so
+                    # surface the API — WASAPI is the modern, lower-latency path
+                    # and far less prone to the multi-second stalls the legacy
+                    # MME interface can hit on USB mics.
+                    try:
+                        hostapi = sd.query_hostapis(d["hostapi"])["name"]
+                    except Exception:
+                        hostapi = ""
                     devices.append({
                         "id": i,
                         "name": d["name"],
+                        "hostapi": hostapi,
                         "default": i == default_in,
                         "sample_rate": int(d["default_samplerate"]),
                     })
