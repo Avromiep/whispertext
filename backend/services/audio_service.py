@@ -269,22 +269,41 @@ class AudioService:
             self._stream.start()
             self._capture_rate = rate
 
-        try:
-            open_at(native or target)
-        except (sd.PortAudioError, ValueError) as exc:
-            self._stream = None
-            if native and native != target:
-                # Native rate rejected — fall back to the configured rate (driver
-                # resamples) rather than failing the dictation.
-                log.warning("Native capture at %d Hz failed (%s); using %d Hz", native, exc, target)
+        # Prefer the mic's native rate (asking a 44.1k/48k device for 16k makes
+        # the driver resample, a dropout source); the configured rate is only a
+        # last resort for APIs that accept it (MME/DirectSound — WASAPI shared
+        # mode rejects it). We downsample to `target` in software on stop().
+        rates = [native or target]
+        if native and native != target:
+            rates.append(target)
+
+        def try_open() -> bool:
+            for rate in rates:
                 try:
-                    open_at(target)
-                except (sd.PortAudioError, ValueError) as exc2:
+                    open_at(rate)
+                    self._stream_device = s.input_device
+                    return True
+                except (sd.PortAudioError, ValueError) as exc:
+                    self._last_open_exc = exc
                     self._stream = None
-                    raise RuntimeError(f"No microphone available: {exc2}") from exc2
-            else:
-                raise RuntimeError(f"No microphone available: {exc}") from exc
-        self._stream_device = s.input_device
+                    if rate != rates[-1]:
+                        log.warning("Capture at %d Hz failed (%s); trying next", rate, exc)
+            return False
+
+        self._last_open_exc = None
+        if try_open():
+            return
+        # Every rate failed — the device may be in a stale/invalidated state
+        # (e.g. WASAPI AUDCLNT_E_DEVICE_INVALIDATED after idle/resume, or a stale
+        # PortAudio handle). Refresh the audio backend and try the whole set once
+        # more before giving up, so a transient glitch self-recovers.
+        log.warning("Mic open failed on all rates (%s); reinitializing audio backend and retrying",
+                    self._last_open_exc)
+        self._reinit_audio_locked()
+        if try_open():
+            log.info("Mic recovered after audio backend reinit")
+            return
+        raise RuntimeError(f"No microphone available: {self._last_open_exc}")
 
     def start(self) -> None:
         """Begin capture. Instant when the stream is warm; a cold device open

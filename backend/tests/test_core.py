@@ -753,6 +753,52 @@ class TestWarmStreamSelfHeal:
         assert calls["reinit"] == 0 and calls["idle"] == 1          # too short to judge
 
 
+class TestMicOpenRecovery:
+    """A transient open failure (e.g. WASAPI AUDCLNT_E_DEVICE_INVALIDATED after
+    idle) must self-recover by reinitializing the audio backend and retrying,
+    not surface as a hard 'No microphone available'."""
+
+    class _FakeStream:
+        active = True
+        def start(self): pass
+        def stop(self): pass
+        def close(self): pass
+
+    def _svc(self, monkeypatch, device=1):
+        import backend.services.audio_service as am
+        from backend.services.audio_service import AudioService
+        from backend.models.settings import AudioSettings, Settings
+        s = Settings(audio=AudioSettings(input_device=device, sample_rate=16000))
+        monkeypatch.setattr(am, "load_settings", lambda: s)
+        svc = AudioService()
+        monkeypatch.setattr(svc, "_native_rate", lambda dev: 48000)
+        return am, svc, s.audio
+
+    def test_open_recovers_after_reinit(self, monkeypatch):
+        am, svc, audio = self._svc(monkeypatch)
+        calls = {"open": 0, "reinit": 0}
+        def fake_stream(**kw):
+            calls["open"] += 1
+            if calls["open"] <= 2:            # both rates fail on the first pass
+                raise am.sd.PortAudioError("AUDCLNT_E_DEVICE_INVALIDATED")
+            return self._FakeStream()
+        monkeypatch.setattr(am.sd, "InputStream", fake_stream)
+        monkeypatch.setattr(svc, "_reinit_audio_locked",
+                            lambda: calls.__setitem__("reinit", calls["reinit"] + 1))
+        svc._ensure_stream_locked(audio)
+        assert calls["reinit"] == 1                 # refreshed the backend once
+        assert svc._stream is not None              # then opened successfully
+        assert svc._stream_device == 1
+
+    def test_open_raises_when_reinit_doesnt_help(self, monkeypatch):
+        am, svc, audio = self._svc(monkeypatch)
+        monkeypatch.setattr(am.sd, "InputStream",
+                            lambda **kw: (_ for _ in ()).throw(am.sd.PortAudioError("nope")))
+        monkeypatch.setattr(svc, "_reinit_audio_locked", lambda: None)
+        with pytest.raises(RuntimeError, match="No microphone available"):
+            svc._ensure_stream_locked(audio)
+
+
 # --------------------------------------------------------------------- hotkeys
 class TestHotkeys:
     def test_double_tap_detection(self, monkeypatch):

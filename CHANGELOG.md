@@ -3,6 +3,16 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.56] — 2026-08-30
+
+### Fixed
+- **"No microphone available" now self-recovers instead of failing.** A transient
+  device error when opening the mic — e.g. a WASAPI device being invalidated after
+  the machine sits idle, or a stale audio handle — used to surface as a hard "No
+  microphone available." The app now refreshes its audio backend and retries the
+  open (trying the device's native rate first, since WASAPI rejects a resampled
+  rate), so a passing glitch recovers on its own.
+
 ## [1.0.55] — 2026-08-30
 
 ### Changed
