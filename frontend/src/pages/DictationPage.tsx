@@ -25,9 +25,17 @@ function TitleList({ value, onChange }: { value: string[]; onChange: (v: string[
 export default function DictationPage() {
   const { settings, patch } = useSettings();
   const [languages, setLanguages] = useState<Record<string, string>>({ auto: "Auto-detect" });
+  // The window title captured for the most recent dictation — shown under the
+  // per-tab list so you can see the EXACT text to match (the app only sees the
+  // title bar, never the URL, so this is the string that matters).
+  const [lastTitle, setLastTitle] = useState<string>("");
 
   useEffect(() => {
     api.systemInfo().then((i) => setLanguages(i.languages)).catch(() => {});
+    api.history().then((h) => {
+      const withTitle = h.find((e) => e.app && e.app.trim());
+      if (withTitle) setLastTitle(withTitle.app);
+    }).catch(() => {});
   }, []);
 
   if (!settings) return null;
@@ -73,6 +81,13 @@ export default function DictationPage() {
         </p>
         <TitleList value={f.sentence_per_line_titles}
           onChange={(v) => patch({ formatting: { sentence_per_line_titles: v } })} />
+        {lastTitle && (
+          <p className="text-[11px] text-muted mt-2 leading-relaxed">
+            Your most recent dictation was captured in a window titled:{" "}
+            <span className="font-mono text-fg break-all">“{lastTitle}”</span>
+            <br />Match a word that appears in that exact text — that's all the app can see (no URL).
+          </p>
+        )}
       </Section>
 
       <Section title="Typing" description="How the final text is inserted at your cursor.">

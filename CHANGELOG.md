@@ -3,6 +3,15 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.54] — 2026-08-30
+
+### Changed
+- **Per-tab layout is easier to set up.** The settings section now shows the exact
+  window title captured from your most recent dictation, so you can see the precise
+  text to match against. Per-tab layout matches the browser/app **title bar** (not
+  the URL), so if a phrase "didn't work" it was usually because it wasn't actually
+  in that title — now you can copy the right word straight from what the app saw.
+
 ## [1.0.53] — 2026-08-30
 
 ### Fixed
