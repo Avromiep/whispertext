@@ -3,6 +3,17 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.51] — 2026-08-30
+
+### Added
+- **Live transcript in the recording overlay.** While you dictate with Deepgram,
+  the HUD now shows the words as they're recognized, on a single line that slides
+  to keep the newest words in view (older text scrolls off the left) rather than
+  wrapping. It's a live "it's hearing you" preview — display only, so it never
+  changes the text that gets typed or adds any release latency. Interim results
+  are free on Deepgram (billing is by audio length). Batch engines (Groq/local)
+  don't stream, so they show the waveform and "Transcribing…" as before.
+
 ## [1.0.50] — 2026-08-23
 
 ### Fixed

@@ -24,8 +24,10 @@ export default function Overlay() {
   const [state, setState] = useState<OverlayState>("hidden");
   const [elapsed, setElapsed] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
+  const [partial, setPartial] = useState("");   // live Deepgram preview text
   const level = useRef(0);          // live mic level 0..1 (smoothed in draw loop)
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
   const startRef = useRef(0);
   const hideTimer = useRef<ReturnType<typeof setTimeout>>();
   const [dark, setDark] = useState(() => (localStorage.getItem("wt-resolved-theme") ?? "light") === "dark");
@@ -53,6 +55,10 @@ export default function Overlay() {
     }
     if (e.type === "audio_level" && typeof e.level === "number") {
       level.current = e.level;
+      return;
+    }
+    if (e.type === "partial") {
+      setPartial(typeof e.text === "string" ? e.text : "");
       return;
     }
     if (e.type === "error") {
@@ -99,6 +105,19 @@ export default function Overlay() {
     const t = setInterval(() => setElapsed((Date.now() - startRef.current) / 1000), 250);
     return () => clearInterval(t);
   }, [state]);
+
+  // The live preview only makes sense while listening; drop it the moment the
+  // stream ends so the pill doesn't linger on stale words during typing/done.
+  useEffect(() => {
+    if (state !== "listening") setPartial("");
+  }, [state]);
+
+  // Single-line preview: keep it scrolled hard right so the newest words stay
+  // visible and older text slides off the left, instead of wrapping/clipping.
+  useEffect(() => {
+    const el = previewRef.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [partial]);
 
   // Strand waveform animation
   useEffect(() => {
@@ -165,50 +184,65 @@ export default function Overlay() {
   const mmss = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(Math.floor(elapsed % 60)).padStart(2, "0")}`;
   const processing = state === "transcribing" || state === "cleaning" || state === "typing";
 
+  // Running transcript for the live preview. Bounded so a very long dictation
+  // doesn't build an enormous single line; the newest words are what show.
+  const preview = partial.length > 300 ? partial.slice(-300) : partial;
+  const showPreview = state === "listening" && preview.length > 0;
+
   return (
     <div className="h-screen w-screen flex items-end justify-center pb-2">
       <div
-        className={`flex items-center gap-3 rounded-2xl px-4 py-3 animate-scale-in transition-all duration-200
+        className={`flex flex-col gap-1.5 rounded-2xl px-4 py-3 animate-scale-in transition-all duration-200
           shadow-[0_8px_40px_rgba(0,0,0,0.45)] border
           ${state === "error"
             ? "bg-[#2a1215] border-red-500/40"
             : "bg-elevated border-border"}`}
         style={{ width: 336 }}
       >
-        {state === "error" ? (
-          <>
-            <span className="text-red-400 text-lg" role="img" aria-label="Error">🎤</span>
-            <span className="text-sm text-red-300 truncate">{errorMsg}</span>
-          </>
-        ) : state === "empty" ? (
-          <>
-            <span className="text-muted text-lg opacity-70" role="img" aria-label="No speech">🎤</span>
-            <span className="text-sm text-muted">No speech detected</span>
-          </>
-        ) : (
-          <>
-            <div className="relative shrink-0">
-              <div
-                className={`w-2.5 h-2.5 rounded-full transition-colors duration-300 ${
-                  state === "listening" ? "bg-red-500 wt-glow"
-                  : state === "done" ? "bg-emerald-500"
-                  : "bg-amber-500"}`}
-              />
-            </div>
-            <canvas ref={canvasRef} className="h-[64px] flex-1" aria-hidden="true" />
-            <div className="shrink-0 w-[74px] text-right">
-              {state === "listening" && (
-                <span className="text-xs font-mono text-muted tabular-nums">{mmss}</span>
-              )}
-              {processing && (
-                <span className="flex items-center justify-end gap-1.5 text-xs text-muted">
-                  <span className="wt-spinner" style={{ width: 12, height: 12 }} />
-                  {STATUS_LABEL[state]}
-                </span>
-              )}
-              {state === "done" && <span className="text-xs text-emerald-600">Done ✓</span>}
-            </div>
-          </>
+        <div className="flex items-center gap-3">
+          {state === "error" ? (
+            <>
+              <span className="text-red-400 text-lg" role="img" aria-label="Error">🎤</span>
+              <span className="text-sm text-red-300 truncate">{errorMsg}</span>
+            </>
+          ) : state === "empty" ? (
+            <>
+              <span className="text-muted text-lg opacity-70" role="img" aria-label="No speech">🎤</span>
+              <span className="text-sm text-muted">No speech detected</span>
+            </>
+          ) : (
+            <>
+              <div className="relative shrink-0">
+                <div
+                  className={`w-2.5 h-2.5 rounded-full transition-colors duration-300 ${
+                    state === "listening" ? "bg-red-500 wt-glow"
+                    : state === "done" ? "bg-emerald-500"
+                    : "bg-amber-500"}`}
+                />
+              </div>
+              <canvas ref={canvasRef} className="h-[64px] flex-1" aria-hidden="true" />
+              <div className="shrink-0 w-[74px] text-right">
+                {state === "listening" && (
+                  <span className="text-xs font-mono text-muted tabular-nums">{mmss}</span>
+                )}
+                {processing && (
+                  <span className="flex items-center justify-end gap-1.5 text-xs text-muted">
+                    <span className="wt-spinner" style={{ width: 12, height: 12 }} />
+                    {STATUS_LABEL[state]}
+                  </span>
+                )}
+                {state === "done" && <span className="text-xs text-emerald-600">Done ✓</span>}
+              </div>
+            </>
+          )}
+        </div>
+        {showPreview && (
+          <div
+            ref={previewRef}
+            className="text-[11px] leading-snug text-muted whitespace-nowrap overflow-hidden px-0.5 border-t border-border/60 pt-1.5"
+          >
+            {preview}
+          </div>
         )}
       </div>
     </div>

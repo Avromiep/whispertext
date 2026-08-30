@@ -12,6 +12,7 @@ import asyncio
 import json
 import queue
 import time
+from typing import Callable
 from urllib.parse import urlencode
 
 import httpx
@@ -99,7 +100,11 @@ def _ws_url(model: str, sample_rate: int, language: str, keyterms: list[str],
             numerals: bool = True) -> str:
     params = [("model", model), ("encoding", "linear16"), ("sample_rate", str(sample_rate)),
               ("channels", "1"), ("punctuate", "true"), ("smart_format", "true"),
-              ("interim_results", "false"), ("endpointing", str(_ENDPOINTING_MS))]
+              # Interim hypotheses stream in as the user speaks so the overlay can
+              # show a live preview. They're display-only and free (billing is by
+              # audio duration): finals are unchanged, so the TYPED text and the
+              # release latency are identical to interim_results=false.
+              ("interim_results", "true"), ("endpointing", str(_ENDPOINTING_MS))]
     if numerals:
         # Force spoken numbers to digits (three -> 3); smart_format alone spells
         # small numbers out per writing style.
@@ -120,11 +125,16 @@ class DeepgramLive:
 
     def __init__(self, key: str, model: str, sample_rate: int,
                  language: str = "auto", keyterms: list[str] | None = None,
-                 numerals: bool = True) -> None:
+                 numerals: bool = True,
+                 on_interim: Callable[[str], None] | None = None) -> None:
         self._key = key
         self._url = _ws_url(model, sample_rate, language, keyterms or [], numerals)
         self._q: queue.Queue = queue.Queue()   # thread-safe: audio thread -> loop
         self._finals: list[str] = []
+        # Display-only callback fed the running transcript (committed finals plus
+        # the current interim tail) so the overlay can show a live preview. Never
+        # affects the returned transcript; guarded so a UI error can't break recv.
+        self._on_interim = on_interim
         self._ws = None
         self._send_task: asyncio.Task | None = None
         self._recv_task: asyncio.Task | None = None
@@ -161,11 +171,32 @@ class DeepgramLive:
     async def _recv(self) -> None:
         try:
             async for msg in self._ws:
-                data = json.loads(msg)
-                if data.get("type") == "Results" and data.get("is_final"):
-                    alts = data.get("channel", {}).get("alternatives", [])
-                    if alts and alts[0].get("transcript"):
-                        self._finals.append(alts[0]["transcript"])
+                self._handle_message(json.loads(msg))
+        except Exception:
+            pass
+
+    def _handle_message(self, data: dict) -> None:
+        """Route one Deepgram message: finals build the returned transcript;
+        interim + final both refresh the live overlay preview."""
+        if data.get("type") != "Results":
+            return
+        alts = data.get("channel", {}).get("alternatives", [])
+        transcript = alts[0].get("transcript") if alts else ""
+        if data.get("is_final"):
+            if transcript:
+                self._finals.append(transcript)
+            self._emit_interim("")                # tail consumed into finals
+        elif transcript:
+            self._emit_interim(transcript)        # live, not-yet-final tail
+
+    def _emit_interim(self, tail: str) -> None:
+        """Push the running transcript (committed finals + live tail) to the
+        display callback. Display-only: never touches what finish() returns."""
+        if self._on_interim is None:
+            return
+        parts = self._finals + ([tail] if tail else [])
+        try:
+            self._on_interim(" ".join(parts).strip())
         except Exception:
             pass
 
@@ -207,12 +238,14 @@ class DeepgramLive:
 
 def make_live(model: str, sample_rate: int, language: str,
               keyterms: list[str] | None = None,
-              numerals: bool = True) -> DeepgramLive | None:
+              numerals: bool = True,
+              on_interim: Callable[[str], None] | None = None) -> DeepgramLive | None:
     """A live session if a key is configured, else None (caller falls back)."""
     key = get_api_key(PROVIDER_ID)
     if not key:
         return None
-    return DeepgramLive(key, model or DEFAULT_MODEL, sample_rate, language, keyterms, numerals)
+    return DeepgramLive(key, model or DEFAULT_MODEL, sample_rate, language,
+                        keyterms, numerals, on_interim)
 
 
 def result(text: str, language: str) -> TranscriptionResult:

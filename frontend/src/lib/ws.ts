@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { WS_URL } from "./api";
 
 export interface WTEvent {
-  type: "status" | "audio_level" | "error" | "notification" | "settings_changed" | "model_download" | "test_result" | "heartbeat";
+  type: "status" | "audio_level" | "partial" | "error" | "notification" | "settings_changed" | "model_download" | "test_result" | "heartbeat";
   ts: number;
   state?: string;
   level?: number;

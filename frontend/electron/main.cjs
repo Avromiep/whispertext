@@ -150,7 +150,10 @@ function ensureOverlay() {
 
 function createOverlay() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-  const W = 360, H = 120;
+  // Height leaves headroom for the pill to grow upward when the live-transcript
+  // preview row appears (the window is bottom-anchored and transparent, so the
+  // extra space is invisible/click-through until text fills it).
+  const W = 360, H = 180;
   overlayWin = new BrowserWindow({
     width: W, height: H,
     x: Math.round((width - W) / 2), y: height - H - 24,

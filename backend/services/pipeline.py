@@ -45,6 +45,7 @@ class DictationPipeline:
         # WebSocket instead of running cleanup/typing/history.
         self._test_mode = False
         self._dg_session = None                # active Deepgram live session, if any
+        self._last_partial = ""                # last live-preview text sent to overlay
         # Persistent loop: keeps provider HTTP connection pools warm between
         # dictations (asyncio.run would tear them down every time).
         self._loop = asyncio.new_event_loop()
@@ -116,18 +117,29 @@ class DictationPipeline:
         rate = getattr(audio_service, "_capture_rate", None) or cfg.audio.sample_rate
         session = deepgram_service.make_live(
             cfg.whisper.deepgram_model, rate, cfg.whisper.language, cfg.vocabulary.words,
-            numerals=cfg.formatting.numbers_as_digits)
+            numerals=cfg.formatting.numbers_as_digits,
+            on_interim=self._publish_partial)
         if session is None:
             return  # no Deepgram key — transcription will fall back to Groq/local
         self._dg_session = session
         audio_service.set_chunk_sink(session.feed)
         asyncio.run_coroutine_threadsafe(session.start(), self._loop)  # connect in background
 
+    def _publish_partial(self, text: str) -> None:
+        """Live-preview text from the Deepgram stream -> overlay. Display-only;
+        deduped so an unchanged hypothesis doesn't spam the event bus. Runs on
+        the pipeline loop thread; bus.publish is thread-safe."""
+        if text == self._last_partial:
+            return
+        self._last_partial = text
+        bus.publish("partial", {"text": text})
+
     def _finish_deepgram(self) -> str | None:
         """Finalize the live session and return its transcript (None => fall
         back to batch). Detaches the sink and clears the session either way."""
         session = self._dg_session
         self._dg_session = None
+        self._last_partial = ""
         if session is None:
             return None
         audio_service.set_chunk_sink(None)
@@ -141,6 +153,7 @@ class DictationPipeline:
     def _discard_deepgram(self) -> None:
         session = self._dg_session
         self._dg_session = None
+        self._last_partial = ""
         if session is None:
             return
         audio_service.set_chunk_sink(None)

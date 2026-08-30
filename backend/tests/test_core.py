@@ -1106,3 +1106,58 @@ class TestPipelineTestMode:
         assert rec["tier"] in ("low", "mid", "high")
         assert rec["recommended"]
         assert rec["whisper_recommendation"] in ("base", "small", "medium")
+
+
+# --------------------------------------------------- Deepgram live-preview text
+class TestDeepgramInterim:
+    """Interim hypotheses drive the overlay's live preview but must never change
+    the transcript that finish() returns (typed output = finals only)."""
+
+    def _live(self):
+        from backend.services.deepgram_service import DeepgramLive
+        seen: list[str] = []
+        live = DeepgramLive.__new__(DeepgramLive)   # skip __init__ (no network)
+        live._finals = []
+        live._on_interim = seen.append
+        return live, seen
+
+    def _results(self, text, is_final):
+        return {"type": "Results", "is_final": is_final,
+                "channel": {"alternatives": [{"transcript": text}]}}
+
+    def test_interim_updates_preview_but_not_finals(self):
+        live, seen = self._live()
+        live._handle_message(self._results("hello", False))
+        live._handle_message(self._results("hello world", False))
+        assert seen == ["hello", "hello world"]
+        assert live._finals == []                   # nothing committed yet
+
+    def test_final_commits_and_accumulates(self):
+        live, seen = self._live()
+        live._handle_message(self._results("hello world", True))
+        live._handle_message(self._results("second part", True))
+        assert live._finals == ["hello world", "second part"]
+        # Preview reflects the running committed transcript.
+        assert seen[-1] == "hello world second part"
+
+    def test_preview_shows_finals_plus_live_tail(self):
+        live, seen = self._live()
+        live._handle_message(self._results("first sentence.", True))
+        live._handle_message(self._results("and the next", False))
+        assert seen[-1] == "first sentence. and the next"
+
+    def test_non_results_messages_ignored(self):
+        live, seen = self._live()
+        live._handle_message({"type": "Metadata"})
+        live._handle_message(self._results("", False))   # empty interim
+        assert seen == []
+        assert live._finals == []
+
+    def test_interim_callback_error_is_swallowed(self):
+        from backend.services.deepgram_service import DeepgramLive
+        live = DeepgramLive.__new__(DeepgramLive)
+        live._finals = []
+        live._on_interim = lambda _t: (_ for _ in ()).throw(RuntimeError("ui boom"))
+        # A display-side error must not propagate into the recv loop.
+        live._handle_message(self._results("boom", True))
+        assert live._finals == ["boom"]
