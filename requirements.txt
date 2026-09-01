@@ -11,6 +11,7 @@ websockets>=12          # Deepgram live streaming
 pydantic>=2.9
 pydantic-settings>=2.6
 pywin32>=306; sys_platform == "win32"
+uiautomation>=2.0; sys_platform == "win32"   # read browser tab title/URL for per-tab layout
 psutil>=6
 pytest>=8
 pytest-asyncio>=0.24

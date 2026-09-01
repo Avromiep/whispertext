@@ -3,6 +3,18 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.57] — 2026-08-30
+
+### Changed
+- **Per-tab layout now matches the page title *and* the URL, and works in Arc.**
+  Previously it could only read the window title, so browsers like Arc — whose
+  window title is just "Arc" — couldn't be targeted per-site, and URLs never
+  matched. It now reads the active tab's page title and URL via Windows UI
+  Automation (including Arc, whose Chromium content is nested in a WinUI shell),
+  so you can match a word from the page name **or** the address, e.g. a domain
+  like `example.com`. Works in Chrome, Edge, and Arc. The read only
+  happens when per-tab layout is actually configured.
+
 ## [1.0.56] — 2026-08-30
 
 ### Fixed

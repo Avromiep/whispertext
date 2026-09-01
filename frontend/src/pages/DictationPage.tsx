@@ -72,20 +72,23 @@ export default function DictationPage() {
           checked={f.numbers_as_digits} onChange={(v) => patch({ formatting: { numbers_as_digits: v } })} />
       </Section>
 
-      <Section title="Per-tab layout" description="Format differently depending on which browser tab you're dictating into — matched by the tab's title, since the app can't read the tab's URL.">
+      <Section title="Per-tab layout" description="Format differently depending on which site you're dictating into — matched by the tab's title or its URL.">
         <div className="text-sm font-medium">One sentence per line</div>
         <p className="text-[11px] text-muted mt-0.5 mb-2">
-          When the active tab's title contains one of these (one per line), each sentence is put on its
-          own line with a blank line between. Use a word from the tab's title — the site or page name,
-          e.g. "Gmail", "Notion", or a document's name.
+          When the active tab's <span className="text-fg">page title</span> or{" "}
+          <span className="text-fg">URL</span> contains one of these (one per line), each sentence is
+          put on its own line with a blank line between. Use the page name or a word from the address —
+          e.g. <span className="font-mono">Gmail</span>, <span className="font-mono">Notion</span>, or a
+          domain like <span className="font-mono">example.com</span>. Works in Chrome, Edge, and Arc.
         </p>
         <TitleList value={f.sentence_per_line_titles}
           onChange={(v) => patch({ formatting: { sentence_per_line_titles: v } })} />
         {lastTitle && (
           <p className="text-[11px] text-muted mt-2 leading-relaxed">
-            Your most recent dictation was captured in a window titled:{" "}
+            Your most recent dictation was in a window titled:{" "}
             <span className="font-mono text-fg break-all">“{lastTitle}”</span>
-            <br />Match a word that appears in that exact text — that's all the app can see (no URL).
+            <br />In Chrome/Edge that includes the page name; Arc shows only “Arc”, so match the page
+            title or a word from the URL (like the domain) instead.
           </p>
         )}
       </Section>

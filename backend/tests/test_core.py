@@ -598,15 +598,48 @@ class TestSentenceLayout:
         from backend.utils.text import sentences_on_separate_lines
         assert sentences_on_separate_lines(text) == expected
 
-    def test_window_layout_only_for_matching_title(self, monkeypatch):
+    def _layout(self, monkeypatch, titles, ctx=("", "")):
         import backend.services.pipeline as pl
         from backend.models.settings import FormattingSettings, Settings
-        s = Settings(formatting=FormattingSettings(sentence_per_line_titles=["Gmail"]))
+        s = Settings(formatting=FormattingSettings(sentence_per_line_titles=titles))
         monkeypatch.setattr(pl, "load_settings", lambda: s)
-        layout = pl.DictationPipeline._apply_window_layout
+        monkeypatch.setattr(pl, "get_active_context", lambda: ctx)
+        return pl.DictationPipeline._apply_window_layout
+
+    def test_window_layout_matches_title(self, monkeypatch):
+        layout = self._layout(monkeypatch, ["Gmail"])
         assert layout("One. Two.", "Inbox - Gmail — Chrome") == "One.\n\nTwo."   # matches
         assert layout("One. Two.", "Untitled - Notepad") == "One. Two."          # no match
         assert layout("One. Two.", None) == "One. Two."                          # no title
+
+    def test_window_layout_matches_browser_url(self, monkeypatch):
+        """Arc's window title is just 'Arc'; matching the URL/page title read via
+        UI Automation is what makes per-tab work there."""
+        layout = self._layout(monkeypatch, ["example.com"],
+                              ctx=("Example Portal", "https://portal.example.com/"))
+        assert layout("One. Two.", "Arc") == "One.\n\nTwo."      # matched via URL
+        # A different site in the same Arc window must NOT match.
+        layout2 = self._layout(monkeypatch, ["example.com"],
+                               ctx=("Grok", "https://grok.com/"))
+        assert layout2("One. Two.", "Arc") == "One. Two."
+
+    def test_window_layout_matches_page_title(self, monkeypatch):
+        layout = self._layout(monkeypatch, ["Grok"], ctx=("Grok", "https://grok.com/"))
+        assert layout("One. Two.", "Arc") == "One.\n\nTwo."      # matched via page title
+
+    def test_window_layout_skips_uia_when_unconfigured(self, monkeypatch):
+        """No configured titles => must NOT run the costly UIA read."""
+        import backend.services.pipeline as pl
+        from backend.models.settings import FormattingSettings, Settings
+        s = Settings(formatting=FormattingSettings(sentence_per_line_titles=[]))
+        monkeypatch.setattr(pl, "load_settings", lambda: s)
+        calls = {"n": 0}
+        def boom():
+            calls["n"] += 1
+            return ("", "")
+        monkeypatch.setattr(pl, "get_active_context", boom)
+        assert pl.DictationPipeline._apply_window_layout("One. Two.", "Arc") == "One. Two."
+        assert calls["n"] == 0
 
 
 # --------------------------------------------------------------- resampling

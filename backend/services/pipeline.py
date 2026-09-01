@@ -18,6 +18,7 @@ from backend.services.groq_whisper_service import (BACKUP_PROVIDER_ID, PROVIDER_
                                                     groq_whisper_service)
 from backend.services.llm_service import llm_service
 from backend.services.typing_service import get_active_window_title, typing_service
+from backend.services.window_context import get_active_context, phrase_matches
 from backend.services.whisper_service import whisper_service
 from backend.storage.database import HistoryStore
 from backend.utils import encryption
@@ -352,12 +353,16 @@ class DictationPipeline:
 
     @staticmethod
     def _apply_window_layout(text: str, window_title: str) -> str:
-        """If the active window/tab title matches a configured phrase, put each
-        sentence on its own line (blank line between). Title-matched because the
-        browser doesn't expose the tab URL to us."""
-        titles = load_settings().formatting.sentence_per_line_titles
-        hay = (window_title or "").lower()
-        if any(t.strip() and t.strip().lower() in hay for t in titles):
+        """If the active tab matches a configured phrase, put each sentence on
+        its own line (blank line between). Matches the window title AND — for
+        browsers, via UI Automation — the page title and URL, so it works even
+        in browsers like Arc whose window title is just the app name. The UIA
+        read only happens when the feature is actually configured."""
+        phrases = load_settings().formatting.sentence_per_line_titles
+        if not any(p.strip() for p in phrases):
+            return text
+        ctx_title, ctx_url = get_active_context()
+        if phrase_matches(phrases, window_title, ctx_title, ctx_url):
             return sentences_on_separate_lines(text)
         return text
 

@@ -18,6 +18,8 @@ Set-Location "$PSScriptRoot\.."
   --collect-all huggingface_hub `
   --collect-submodules keyring `
   --collect-submodules websockets `
+  --collect-all comtypes `
+  --collect-all uiautomation `
   --hidden-import backend.app `
   backend\app.py
 
