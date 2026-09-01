@@ -13,6 +13,7 @@ so callers gate it on the per-tab feature being configured.
 from __future__ import annotations
 
 import ctypes
+import os
 from ctypes import wintypes
 
 from backend.utils.logger import get_logger
@@ -101,6 +102,15 @@ def _browser_title_url(hwnd: int) -> tuple[str, str]:
         return "", ""                     # not a browser — skip the UIA import
     try:
         import uiautomation as auto
+        # uiautomation drops an "@AutomationLog.txt" in the working directory by
+        # default; silence it so it doesn't litter the app/install folder.
+        try:
+            auto.Logger.SetLogFile(os.devnull)
+        except Exception:
+            try:
+                auto.Logger.FileName = os.devnull
+            except Exception:
+                pass
     except Exception:
         return "", ""
     budget = [_MAX_NODES]
