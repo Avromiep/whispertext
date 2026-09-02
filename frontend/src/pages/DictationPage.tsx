@@ -8,9 +8,10 @@ import { PageHeader, Section, Select, Slider, Toggle } from "../components/ui";
 /** Per-site layout rules: a match phrase (page title or URL word) plus how to
  * space the sentences — a blank line between each, or none. */
 function RulesList({ value, onChange }: { value: PerTabRule[]; onChange: (v: PerTabRule[]) => void }) {
+  const [confirmIdx, setConfirmIdx] = useState<number | null>(null);
   const setRule = (i: number, patch: Partial<PerTabRule>) =>
     onChange(value.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-  const remove = (i: number) => onChange(value.filter((_, j) => j !== i));
+  const remove = (i: number) => { onChange(value.filter((_, j) => j !== i)); setConfirmIdx(null); };
   const add = () => onChange([...value, { match: "", blank_line: true }]);
 
   return (
@@ -35,8 +36,18 @@ function RulesList({ value, onChange }: { value: PerTabRule[]; onChange: (v: Per
               No blank line
             </button>
           </div>
-          <button type="button" onClick={() => remove(i)} aria-label="Remove"
-            className="text-muted hover:text-red-400 px-1 py-2 shrink-0 text-sm">✕</button>
+          {confirmIdx === i ? (
+            <div className="flex items-center gap-1 shrink-0">
+              <button type="button" onClick={() => remove(i)}
+                className="text-xs text-white bg-red-500 hover:bg-red-600 rounded px-2 py-1.5">Remove</button>
+              <button type="button" onClick={() => setConfirmIdx(null)}
+                className="text-xs text-muted hover:text-fg px-1.5 py-1.5">Cancel</button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setConfirmIdx(i)} aria-label="Remove"
+              title="Remove this site"
+              className="text-muted hover:text-red-400 px-1 py-2 shrink-0 text-sm">✕</button>
+          )}
         </div>
       ))}
       <button type="button" onClick={add} className="text-xs text-accent hover:underline">
