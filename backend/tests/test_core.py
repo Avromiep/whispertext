@@ -598,16 +598,17 @@ class TestSentenceLayout:
         from backend.utils.text import sentences_on_separate_lines
         assert sentences_on_separate_lines(text) == expected
 
-    def _layout(self, monkeypatch, titles, ctx=("", "")):
+    def _layout(self, monkeypatch, rules, ctx=("", "")):
         import backend.services.pipeline as pl
-        from backend.models.settings import FormattingSettings, Settings
-        s = Settings(formatting=FormattingSettings(sentence_per_line_titles=titles))
+        from backend.models.settings import FormattingSettings, PerTabRule, Settings
+        pt = [r if isinstance(r, PerTabRule) else PerTabRule(**r) for r in rules]
+        s = Settings(formatting=FormattingSettings(per_tab_rules=pt))
         monkeypatch.setattr(pl, "load_settings", lambda: s)
         monkeypatch.setattr(pl, "get_active_context", lambda: ctx)
         return pl.DictationPipeline._apply_window_layout
 
     def test_window_layout_matches_title(self, monkeypatch):
-        layout = self._layout(monkeypatch, ["Gmail"])
+        layout = self._layout(monkeypatch, [{"match": "Gmail"}])
         assert layout("One. Two.", "Inbox - Gmail — Chrome") == "One.\n\nTwo."   # matches
         assert layout("One. Two.", "Untitled - Notepad") == "One. Two."          # no match
         assert layout("One. Two.", None) == "One. Two."                          # no title
@@ -615,23 +616,31 @@ class TestSentenceLayout:
     def test_window_layout_matches_browser_url(self, monkeypatch):
         """Arc's window title is just 'Arc'; matching the URL/page title read via
         UI Automation is what makes per-tab work there."""
-        layout = self._layout(monkeypatch, ["example.com"],
+        layout = self._layout(monkeypatch, [{"match": "example.com"}],
                               ctx=("Example Portal", "https://portal.example.com/"))
         assert layout("One. Two.", "Arc") == "One.\n\nTwo."      # matched via URL
-        # A different site in the same Arc window must NOT match.
-        layout2 = self._layout(monkeypatch, ["example.com"],
+        layout2 = self._layout(monkeypatch, [{"match": "example.com"}],
                                ctx=("Grok", "https://grok.com/"))
-        assert layout2("One. Two.", "Arc") == "One. Two."
+        assert layout2("One. Two.", "Arc") == "One. Two."        # different site: no match
 
-    def test_window_layout_matches_page_title(self, monkeypatch):
-        layout = self._layout(monkeypatch, ["Grok"], ctx=("Grok", "https://grok.com/"))
-        assert layout("One. Two.", "Arc") == "One.\n\nTwo."      # matched via page title
+    def test_window_layout_no_blank_line_rule(self, monkeypatch):
+        """A rule with blank_line=False stacks sentences on consecutive lines."""
+        layout = self._layout(monkeypatch, [{"match": "Grok", "blank_line": False}],
+                              ctx=("Grok", "https://grok.com/"))
+        assert layout("One. Two. Three.", "Arc") == "One.\nTwo.\nThree."
+
+    def test_window_layout_first_matching_rule_wins(self, monkeypatch):
+        layout = self._layout(monkeypatch,
+                              [{"match": "grok.com", "blank_line": False},
+                               {"match": "Grok", "blank_line": True}],
+                              ctx=("Grok", "https://grok.com/"))
+        assert layout("One. Two.", "Arc") == "One.\nTwo."        # first rule (no blank) wins
 
     def test_window_layout_skips_uia_when_unconfigured(self, monkeypatch):
-        """No configured titles => must NOT run the costly UIA read."""
+        """No configured rules => must NOT run the costly UIA read."""
         import backend.services.pipeline as pl
         from backend.models.settings import FormattingSettings, Settings
-        s = Settings(formatting=FormattingSettings(sentence_per_line_titles=[]))
+        s = Settings(formatting=FormattingSettings(per_tab_rules=[]))
         monkeypatch.setattr(pl, "load_settings", lambda: s)
         calls = {"n": 0}
         def boom():
@@ -640,6 +649,13 @@ class TestSentenceLayout:
         monkeypatch.setattr(pl, "get_active_context", boom)
         assert pl.DictationPipeline._apply_window_layout("One. Two.", "Arc") == "One. Two."
         assert calls["n"] == 0
+
+    def test_legacy_titles_migrate_to_rules(self):
+        """Old settings.json with sentence_per_line_titles becomes blank-line rules."""
+        from backend.models.settings import FormattingSettings
+        f = FormattingSettings.model_validate({"sentence_per_line_titles": ["Gmail", "Notion"]})
+        assert [(r.match, r.blank_line) for r in f.per_tab_rules] == [
+            ("Gmail", True), ("Notion", True)]
 
 
 # --------------------------------------------------------------- resampling

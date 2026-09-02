@@ -3,6 +3,15 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.58] — 2026-08-30
+
+### Added
+- **Per-tab layout: choose the spacing for each site.** Every site in the per-tab
+  list now has its own spacing choice — **Blank line** (an empty line between each
+  sentence) or **No blank line** (sentences on consecutive lines). Add a site,
+  type a word from its page title or URL, and pick the style. Your existing
+  entries carry over as "Blank line" (the previous behavior).
+
 ## [1.0.57] — 2026-08-30
 
 ### Changed

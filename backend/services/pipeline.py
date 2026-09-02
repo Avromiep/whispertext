@@ -18,7 +18,7 @@ from backend.services.groq_whisper_service import (BACKUP_PROVIDER_ID, PROVIDER_
                                                     groq_whisper_service)
 from backend.services.llm_service import llm_service
 from backend.services.typing_service import get_active_window_title, typing_service
-from backend.services.window_context import get_active_context, phrase_matches
+from backend.services.window_context import get_active_context
 from backend.services.whisper_service import whisper_service
 from backend.storage.database import HistoryStore
 from backend.utils import encryption
@@ -353,17 +353,19 @@ class DictationPipeline:
 
     @staticmethod
     def _apply_window_layout(text: str, window_title: str) -> str:
-        """If the active tab matches a configured phrase, put each sentence on
-        its own line (blank line between). Matches the window title AND — for
-        browsers, via UI Automation — the page title and URL, so it works even
-        in browsers like Arc whose window title is just the app name. The UIA
-        read only happens when the feature is actually configured."""
-        phrases = load_settings().formatting.sentence_per_line_titles
-        if not any(p.strip() for p in phrases):
+        """If the active tab matches a per-tab rule, put each sentence on its own
+        line — with or without a blank line between, per that rule. Matches the
+        window title AND — for browsers, via UI Automation — the page title and
+        URL, so it works even in browsers like Arc whose window title is just the
+        app name. The UIA read only happens when a rule is actually configured."""
+        rules = [r for r in load_settings().formatting.per_tab_rules if r.match.strip()]
+        if not rules:
             return text
         ctx_title, ctx_url = get_active_context()
-        if phrase_matches(phrases, window_title, ctx_title, ctx_url):
-            return sentences_on_separate_lines(text)
+        hay = " ".join(t for t in (window_title, ctx_title, ctx_url) if t).lower()
+        for rule in rules:
+            if rule.match.strip().lower() in hay:
+                return sentences_on_separate_lines(text, blank_line=rule.blank_line)
         return text
 
 

@@ -6,7 +6,7 @@ import threading
 import time
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.config import APP_DIR, SETTINGS_FILE
 
@@ -108,6 +108,14 @@ class TypingSettings(BaseModel):
     restore_clipboard: bool = True
 
 
+class PerTabRule(BaseModel):
+    """One per-tab layout rule: when the active tab's title/URL contains `match`,
+    put each sentence on its own line. `blank_line` adds an empty line between
+    sentences (double-spaced); off puts them on consecutive lines."""
+    match: str = ""
+    blank_line: bool = True
+
+
 class FormattingSettings(BaseModel):
     auto_capitalize: bool = True
     auto_punctuate: bool = True
@@ -118,11 +126,24 @@ class FormattingSettings(BaseModel):
     # Force spoken numbers to digits (three -> 3). Deepgram's smart_format spells
     # out small numbers per writing style; this overrides that via its `numerals`.
     numbers_as_digits: bool = True
-    # When the active window/tab TITLE contains one of these (case-insensitive),
-    # put each sentence on its own line with a blank line between — e.g. a site
-    # you dictate into. Matched on the title because the browser doesn't expose
-    # the tab URL to other apps.
-    sentence_per_line_titles: list[str] = Field(default_factory=list)
+    # Per-tab sentence layout: when the active tab's title OR URL contains a
+    # rule's `match` (case-insensitive), each sentence goes on its own line —
+    # with or without a blank line between, per the rule.
+    per_tab_rules: list[PerTabRule] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_titles(cls, data):
+        """Carry forward the old `sentence_per_line_titles: list[str]` — each
+        becomes a blank-line-between rule (the previous behavior)."""
+        if isinstance(data, dict) and not data.get("per_tab_rules"):
+            legacy = data.get("sentence_per_line_titles")
+            if isinstance(legacy, list):
+                data["per_tab_rules"] = [
+                    {"match": t, "blank_line": True}
+                    for t in legacy if isinstance(t, str) and t.strip()
+                ]
+        return data
 
 
 class VocabularySettings(BaseModel):

@@ -102,10 +102,11 @@ def fix_ordinal_idioms(text: str) -> str:
     return _ORDINAL.sub(repl, text)
 
 
-def sentences_on_separate_lines(text: str) -> str:
-    """Put each sentence on its own line, with a blank line between them."""
+def sentences_on_separate_lines(text: str, blank_line: bool = True) -> str:
+    """Put each sentence on its own line. With `blank_line` (default) an empty
+    line separates each; otherwise the sentences sit on consecutive lines."""
     parts = [p.strip() for p in _SENTENCE_BOUNDARY.split(text.strip()) if p.strip()]
-    return "\n\n".join(parts)
+    return ("\n\n" if blank_line else "\n").join(parts)
 
 
 # Whisper was trained on captioned video, so when handed audio with no speech

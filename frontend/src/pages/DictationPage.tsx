@@ -1,24 +1,48 @@
 /** Dictation settings: formatting, typing behavior, language, cleanup toggles. */
-import { api, } from "../lib/api";
+import { api } from "../lib/api";
+import type { PerTabRule } from "../lib/api";
 import { useEffect, useState } from "react";
 import { useSettings } from "../hooks/useSettings";
 import { PageHeader, Section, Select, Slider, Toggle } from "../components/ui";
 
-/** One tab-title phrase per line. Local state so typing (incl. blank lines)
- * isn't disrupted; the stored setting is the trimmed, non-empty lines. */
-function TitleList({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
-  const [text, setText] = useState(value.join("\n"));
+/** Per-site layout rules: a match phrase (page title or URL word) plus how to
+ * space the sentences — a blank line between each, or none. */
+function RulesList({ value, onChange }: { value: PerTabRule[]; onChange: (v: PerTabRule[]) => void }) {
+  const setRule = (i: number, patch: Partial<PerTabRule>) =>
+    onChange(value.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const remove = (i: number) => onChange(value.filter((_, j) => j !== i));
+  const add = () => onChange([...value, { match: "", blank_line: true }]);
+
   return (
-    <textarea
-      value={text}
-      onChange={(e) => {
-        setText(e.target.value);
-        onChange(e.target.value.split("\n").map((s) => s.trim()).filter(Boolean));
-      }}
-      rows={3}
-      placeholder={"Gmail\nNotion\nMy Journal"}
-      className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-mono resize-y focus:border-accent outline-none"
-    />
+    <div className="space-y-2">
+      {value.map((r, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <input
+            value={r.match}
+            onChange={(e) => setRule(i, { match: e.target.value })}
+            placeholder="Gmail, Notion, example.com…"
+            className="flex-1 min-w-0 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-mono focus:border-accent outline-none"
+          />
+          <div className="flex rounded-lg border border-border overflow-hidden text-xs shrink-0">
+            <button type="button" onClick={() => setRule(i, { blank_line: true })}
+              title="A blank line between each sentence"
+              className={r.blank_line ? "bg-accent text-white px-2.5 py-2" : "text-muted hover:text-fg px-2.5 py-2"}>
+              Blank line
+            </button>
+            <button type="button" onClick={() => setRule(i, { blank_line: false })}
+              title="Each sentence on the next line, no gap"
+              className={!r.blank_line ? "bg-accent text-white px-2.5 py-2" : "text-muted hover:text-fg px-2.5 py-2"}>
+              No blank line
+            </button>
+          </div>
+          <button type="button" onClick={() => remove(i)} aria-label="Remove"
+            className="text-muted hover:text-red-400 px-1 py-2 shrink-0 text-sm">✕</button>
+        </div>
+      ))}
+      <button type="button" onClick={add} className="text-xs text-accent hover:underline">
+        + Add a site
+      </button>
+    </div>
   );
 }
 
@@ -72,17 +96,18 @@ export default function DictationPage() {
           checked={f.numbers_as_digits} onChange={(v) => patch({ formatting: { numbers_as_digits: v } })} />
       </Section>
 
-      <Section title="Per-tab layout" description="Format differently depending on which site you're dictating into — matched by the tab's title or its URL.">
-        <div className="text-sm font-medium">One sentence per line</div>
-        <p className="text-[11px] text-muted mt-0.5 mb-2">
-          When the active tab's <span className="text-fg">page title</span> or{" "}
-          <span className="text-fg">URL</span> contains one of these (one per line), each sentence is
-          put on its own line with a blank line between. Use the page name or a word from the address —
-          e.g. <span className="font-mono">Gmail</span>, <span className="font-mono">Notion</span>, or a
-          domain like <span className="font-mono">example.com</span>. Works in Chrome, Edge, and Arc.
+      <Section title="Per-tab layout" description="On matching sites, put each sentence on its own line — matched by the tab's page title or URL.">
+        <p className="text-[11px] text-muted mb-2 leading-relaxed">
+          Add a site by a word from its <span className="text-fg">page title</span> or{" "}
+          <span className="text-fg">URL</span> — e.g. <span className="font-mono">Gmail</span>,{" "}
+          <span className="font-mono">Notion</span>, or a domain like{" "}
+          <span className="font-mono">example.com</span>. Then choose the spacing:{" "}
+          <span className="text-fg">Blank line</span> puts an empty line between each sentence;{" "}
+          <span className="text-fg">No blank line</span> stacks them on consecutive lines.
+          Works in Chrome, Edge, and Arc.
         </p>
-        <TitleList value={f.sentence_per_line_titles}
-          onChange={(v) => patch({ formatting: { sentence_per_line_titles: v } })} />
+        <RulesList value={f.per_tab_rules}
+          onChange={(v) => patch({ formatting: { per_tab_rules: v } })} />
         {lastTitle && (
           <p className="text-[11px] text-muted mt-2 leading-relaxed">
             Your most recent dictation was in a window titled:{" "}
