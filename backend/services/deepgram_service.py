@@ -131,6 +131,8 @@ class DeepgramLive:
         self._url = _ws_url(model, sample_rate, language, keyterms or [], numerals)
         self._q: queue.Queue = queue.Queue()   # thread-safe: audio thread -> loop
         self._finals: list[str] = []
+        self._inserts: list[tuple[int, str]] = []   # (finals-index, clipboard text) to splice
+        self._pending_clip: list[str] = []          # clips awaiting the next finalized segment
         # Display-only callback fed the running transcript (committed finals plus
         # the current interim tail) so the overlay can show a live preview. Never
         # affects the returned transcript; guarded so a UI error can't break recv.
@@ -153,6 +155,43 @@ class DeepgramLive:
     def feed(self, pcm_bytes: bytes) -> None:
         """Called from the audio callback thread — must be cheap (just enqueue)."""
         self._q.put_nowait(pcm_bytes)
+
+    def insert_clipboard(self, text: str) -> None:
+        """Queue `text` to splice in at the current point. The caller also calls
+        finalize(), which forces Deepgram to flush the words spoken so far into a
+        final segment; the clip is then placed right after that segment (see
+        _handle_message), so it lands where the key was pressed — not at the
+        start, which is where a naive finals-count would put it (finals lag)."""
+        if text:
+            self._pending_clip.append(text)
+
+    async def finalize(self) -> None:
+        """Ask Deepgram to finalize buffered audio now, so the words spoken up to
+        the key press become a segment and the queued clip lands after them."""
+        try:
+            if self._ws is not None:
+                await self._ws.send(json.dumps({"type": "Finalize"}))
+        except Exception:
+            pass
+
+    def _assemble(self) -> str:
+        """Join finalized segments with any clipboard inserts spliced in at the
+        segment index they were captured at."""
+        # Any clip still pending (its finalize produced no further final) goes at
+        # the current end so it's never dropped.
+        if self._pending_clip:
+            idx = len(self._finals)
+            self._inserts.extend((idx, clip) for clip in self._pending_clip)
+            self._pending_clip = []
+        by_idx: dict[int, list[str]] = {}
+        for idx, txt in self._inserts:
+            by_idx.setdefault(idx, []).append(txt)
+        parts: list[str] = []
+        for i in range(len(self._finals) + 1):
+            parts.extend(by_idx.get(i, []))
+            if i < len(self._finals):
+                parts.append(self._finals[i])
+        return " ".join(p for p in parts if p).strip()
 
     async def _send(self) -> None:
         while True:
@@ -185,6 +224,14 @@ class DeepgramLive:
         if data.get("is_final"):
             if transcript:
                 self._finals.append(transcript)
+            # Place any clipboard inserts the user requested since the last
+            # finalize: they go right after the words just finalized (which the
+            # user's key press flushed via finalize()), i.e. at the press point.
+            if self._pending_clip:
+                pending, self._pending_clip = self._pending_clip, []
+                idx = len(self._finals)
+                for clip in pending:
+                    self._inserts.append((idx, clip))
             self._emit_interim("")                # tail consumed into finals
         elif transcript:
             self._emit_interim(transcript)        # live, not-yet-final tail
@@ -221,7 +268,7 @@ class DeepgramLive:
             await self._ws.close()
         except Exception:
             pass
-        return " ".join(self._finals).strip()
+        return self._assemble()
 
     async def close(self) -> None:
         """Abandon the session (e.g. no speech) without waiting for a transcript."""

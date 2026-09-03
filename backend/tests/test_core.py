@@ -869,7 +869,7 @@ class TestHotkeys:
         svc._on_event(Ev("right ctrl", "up"))
         svc._on_event(Ev("right ctrl", "down"))
         time.sleep(0.15)                            # dispatch thread
-        assert fired == [1]
+        assert fired == []                          # hands-free removed -> no double-tap toggle
         assert _norm("left windows") == "windows"
 
     def test_ptt_hold_and_release(self, monkeypatch):
@@ -1277,6 +1277,8 @@ class TestDeepgramInterim:
         seen: list[str] = []
         live = DeepgramLive.__new__(DeepgramLive)   # skip __init__ (no network)
         live._finals = []
+        live._inserts = []
+        live._pending_clip = []
         live._on_interim = seen.append
         return live, seen
 
@@ -1316,7 +1318,54 @@ class TestDeepgramInterim:
         from backend.services.deepgram_service import DeepgramLive
         live = DeepgramLive.__new__(DeepgramLive)
         live._finals = []
+        live._inserts = []
+        live._pending_clip = []
         live._on_interim = lambda _t: (_ for _ in ()).throw(RuntimeError("ui boom"))
         # A display-side error must not propagate into the recv loop.
         live._handle_message(self._results("boom", True))
         assert live._finals == ["boom"]
+
+
+class TestClipboardInsert:
+    """Win+Shift+N queues a clip; the caller finalizes, which flushes the words
+    spoken so far into a segment, and the clip lands right after it — where the
+    key was pressed, not at the start (finals lag the live audio)."""
+
+    def _live(self):
+        from backend.services.deepgram_service import DeepgramLive
+        dl = DeepgramLive.__new__(DeepgramLive)
+        dl._finals = []
+        dl._inserts = []
+        dl._pending_clip = []
+        dl._on_interim = None
+        return dl
+
+    def _final(self, dl, text):
+        dl._handle_message({"type": "Results", "is_final": True,
+                            "channel": {"alternatives": [{"transcript": text}]}})
+
+    def test_insert_lands_after_flushed_words(self):
+        dl = self._live()
+        dl.insert_clipboard("123 Main St")   # user taps N mid-sentence (pending)
+        self._final(dl, "The meeting is at") # finalize flushes the spoken words
+        self._final(dl, "on Tuesday.")       # continued speech
+        assert dl._assemble() == "The meeting is at 123 Main St on Tuesday."
+
+    def test_multiple_inserts_keep_order(self):
+        dl = self._live()
+        dl.insert_clipboard("X"); self._final(dl, "A.")
+        dl.insert_clipboard("Y"); self._final(dl, "B.")
+        assert dl._assemble() == "A. X B. Y"
+
+    def test_pending_clip_flushed_at_assemble(self):
+        """A clip whose finalize produced no further final still isn't lost."""
+        dl = self._live()
+        self._final(dl, "One.")
+        dl.insert_clipboard("LATE")          # pending, no final follows
+        assert dl._assemble() == "One. LATE"
+
+    def test_empty_clipboard_ignored(self):
+        dl = self._live()
+        dl.insert_clipboard("")
+        self._final(dl, "One.")
+        assert dl._assemble() == "One."

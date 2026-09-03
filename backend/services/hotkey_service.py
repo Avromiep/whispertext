@@ -89,8 +89,11 @@ class HotkeyService:
         self.on_ptt_start: Callable[[], None] = lambda: None
         self.on_ptt_stop: Callable[[], None] = lambda: None
         self.on_toggle: Callable[[], None] = lambda: None
+        self.on_clipboard_insert: Callable[[], None] = lambda: None
         self._down: set[str] = set()
         self._ptt_active = False
+        self._insert_held = False             # insert key down (debounce OS key-repeat)
+        self._insert_hook = None              # dedicated suppressing hook for the insert key
         self._last_tap = 0.0
         self._tap_armed = False
         self._hook = None
@@ -111,6 +114,7 @@ class HotkeyService:
         # never does a settings-file read (that per-event work was a stall risk).
         self._combo: set[str] = set()
         self._toggle_key = ""
+        self._insert_key = "n"                # clipboard-insert key (Win+Shift+N)
         self._hands_free_enabled = True
         self._double_tap_ms = 350
 
@@ -122,7 +126,11 @@ class HotkeyService:
             hk = load_settings().hotkeys
             self._combo = {_norm(p.strip()) for p in hk.push_to_talk.split("+")}
             self._toggle_key = _norm(hk.toggle_key)
-            self._hands_free_enabled = hk.hands_free_enabled
+            self._insert_key = _norm(hk.clipboard_insert_key)
+            # Hands-free (double-tap toggle) was removed from the UI; hard-disable
+            # it here so a stored hands_free_enabled=True (or a bare-modifier
+            # toggle key like Alt) can never fire a recording by accident.
+            self._hands_free_enabled = False
             self._double_tap_ms = hk.double_tap_window_ms
         except Exception:
             log.exception("Hotkey config refresh failed; keeping previous bindings")
@@ -153,6 +161,7 @@ class HotkeyService:
             # means it can't act on resume (spuriously stop, or leave a phantom
             # key that blocks the next exact-combo match).
             self._cancel_pending_ptt()
+            self._unregister_insert_hook()    # don't keep suppressing N while paused
             with self._lock:
                 self._down.clear()
                 self._ptt_active = False
@@ -224,6 +233,9 @@ class HotkeyService:
                     self._ptt_timer.start()
                 elif self._ptt_pending and name not in combo:
                     self._cancel_pending_ptt()   # extra key -> a chord, not dictation
+                # The clipboard-insert key (e.g. N) is handled by a dedicated
+                # suppressing hook installed while recording (_on_insert_key), not
+                # here — a plain observing hook can't stop it leaking to the app.
                 # Double-tap detection for hands-free toggle (skippable).
                 if self._hands_free_enabled and name == toggle_key:
                     now = time.monotonic()
@@ -242,6 +254,8 @@ class HotkeyService:
                     self._cancel_pending_ptt()   # released before the window elapsed
                 if self._ptt_active and not self._combo_held(combo):
                     self._ptt_active = False
+                    self._insert_held = False
+                    self._unregister_insert_hook()
                     self._dispatch(self.on_ptt_stop)
 
     @staticmethod
@@ -256,6 +270,43 @@ class HotkeyService:
             self._ptt_timer.cancel()
             self._ptt_timer = None
 
+    def _on_insert_key(self, event) -> None:
+        """Dedicated suppressing hook for the insert key while recording: fires
+        the clipboard insert AND stops the key reaching the app. Handles both
+        down and up so OS key-repeat fires it only once per physical press."""
+        if getattr(event, "event_type", None) == "up":
+            self._insert_held = False
+            return
+        if self._ptt_active and not self._insert_held:
+            self._insert_held = True
+            log.info("clipboard-insert key during dictation")
+            self._dispatch(self.on_clipboard_insert)
+
+    def _register_insert_hook(self) -> None:
+        """Install the suppressing insert-key hook for the duration of a
+        recording, so N (etc.) triggers a clipboard splice and never leaks."""
+        self._insert_held = False
+        try:
+            if self._insert_hook is None and self._insert_key:
+                self._insert_hook = keyboard.hook_key(
+                    self._insert_key, self._on_insert_key, suppress=True)
+        except Exception as exc:
+            log.debug("register insert hook failed: %s", exc)
+
+    def _unregister_insert_hook(self) -> None:
+        hook = self._insert_hook
+        self._insert_hook = None
+        self._insert_held = False
+        if hook is None:
+            return
+        try:
+            keyboard.unhook(hook)
+        except Exception:
+            try:
+                keyboard.unhook_key(self._insert_key)
+            except Exception as exc:
+                log.debug("unregister insert hook failed: %s", exc)
+
     def _ptt_commit(self) -> None:
         """Fires after the chord window with no extra key — start recording."""
         with self._lock:
@@ -267,6 +318,7 @@ class HotkeyService:
                     and not self._extra_modifier_held(self._combo)):
                 return   # combo released or an extra modifier joined during the wait
             self._ptt_active = True
+        self._register_insert_hook()              # stop the insert key leaking to apps
         log.info("push-to-talk fired (down=%s)", sorted(self._down))
         self._dispatch(self.on_ptt_start)
 
@@ -314,6 +366,7 @@ class HotkeyService:
                     with self._lock:
                         was_active, self._ptt_active = self._ptt_active, False
                     if was_active:
+                        self._unregister_insert_hook()
                         self._dispatch(self.on_ptt_stop)
                     continue
                 if self._ptt_active:

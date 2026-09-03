@@ -18,35 +18,38 @@ function RulesList({ value, onChange }: { value: PerTabRule[]; onChange: (v: Per
     <div className="space-y-2">
       {value.map((r, i) => (
         <div key={i} className="flex items-center gap-2">
-          <input
-            value={r.match}
-            onChange={(e) => setRule(i, { match: e.target.value })}
-            placeholder="Gmail, Notion, example.com…"
-            className="flex-1 min-w-0 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-mono focus:border-accent outline-none"
-          />
-          <div className="flex rounded-lg border border-border overflow-hidden text-xs shrink-0">
-            <button type="button" onClick={() => setRule(i, { blank_line: true })}
-              title="A blank line between each sentence"
-              className={r.blank_line ? "bg-accent text-white px-2.5 py-2" : "text-muted hover:text-fg px-2.5 py-2"}>
-              Blank line
-            </button>
-            <button type="button" onClick={() => setRule(i, { blank_line: false })}
-              title="Each sentence on the next line, no gap"
-              className={!r.blank_line ? "bg-accent text-white px-2.5 py-2" : "text-muted hover:text-fg px-2.5 py-2"}>
-              No blank line
-            </button>
-          </div>
           {confirmIdx === i ? (
-            <div className="flex items-center gap-1 shrink-0">
+            <>
+              <span className="flex-1 min-w-0 text-sm">Are you sure you want to delete this site?</span>
               <button type="button" onClick={() => remove(i)}
-                className="text-xs text-white bg-red-500 hover:bg-red-600 rounded px-2 py-1.5">Remove</button>
+                className="text-xs text-white bg-red-500 hover:bg-red-600 rounded px-3.5 py-1.5 shrink-0">Yes</button>
               <button type="button" onClick={() => setConfirmIdx(null)}
-                className="text-xs text-muted hover:text-fg px-1.5 py-1.5">Cancel</button>
-            </div>
+                className="text-xs bg-elevated border border-border hover:bg-border/60 rounded px-3.5 py-1.5 shrink-0">No</button>
+            </>
           ) : (
-            <button type="button" onClick={() => setConfirmIdx(i)} aria-label="Remove"
-              title="Remove this site"
-              className="text-muted hover:text-red-400 px-1 py-2 shrink-0 text-sm">✕</button>
+            <>
+              <input
+                value={r.match}
+                onChange={(e) => setRule(i, { match: e.target.value })}
+                placeholder="Gmail, Notion, example.com…"
+                className="flex-1 min-w-0 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-mono focus:border-accent outline-none"
+              />
+              <div className="flex rounded-lg border border-border overflow-hidden text-xs shrink-0">
+                <button type="button" onClick={() => setRule(i, { blank_line: true })}
+                  title="A blank line between each sentence"
+                  className={r.blank_line ? "bg-accent text-white px-2.5 py-2" : "text-muted hover:text-fg px-2.5 py-2"}>
+                  Blank line
+                </button>
+                <button type="button" onClick={() => setRule(i, { blank_line: false })}
+                  title="Each sentence on the next line, no gap"
+                  className={!r.blank_line ? "bg-accent text-white px-2.5 py-2" : "text-muted hover:text-fg px-2.5 py-2"}>
+                  No blank line
+                </button>
+              </div>
+              <button type="button" onClick={() => setConfirmIdx(i)} aria-label="Remove"
+                title="Remove this site"
+                className="text-muted hover:text-red-400 px-1 py-2 shrink-0 text-sm">✕</button>
+            </>
           )}
         </div>
       ))}

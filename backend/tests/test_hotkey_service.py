@@ -27,6 +27,8 @@ def _make(monkeypatch, combo="windows+shift"):
     svc.on_ptt_start = lambda: calls.__setitem__("start", calls["start"] + 1)
     svc.on_ptt_stop = lambda: calls.__setitem__("stop", calls["stop"] + 1)
     svc._dispatch = lambda cb: cb()           # run callbacks synchronously in-test
+    svc._register_insert_hook = lambda: None  # don't touch the real OS keyboard in tests
+    svc._unregister_insert_hook = lambda: None
     return svc, calls, held
 
 
@@ -112,7 +114,9 @@ def test_doubled_event_does_not_read_as_double_tap(monkeypatch):
     assert fired == []                          # deduped — not a real double-tap
 
 
-def test_real_double_tap_still_fires(monkeypatch):
+def test_double_tap_no_longer_fires(monkeypatch):
+    """Hands-free was removed from the app, so a double-tap must do nothing even
+    when the stored settings still have hands_free_enabled=True."""
     clock = {"t": 100.0}
     svc, fired = _make_toggle(monkeypatch, clock)
     svc._on_event(_evt("right ctrl", "down"))
@@ -120,7 +124,7 @@ def test_real_double_tap_still_fires(monkeypatch):
     svc._on_event(_evt("right ctrl", "up"))
     clock["t"] += 0.150                          # second tap 150 ms later
     svc._on_event(_evt("right ctrl", "down"))
-    assert fired == [1]
+    assert fired == []                           # hands-free disabled -> no toggle
 
 
 def test_canary_probes_when_keyboard_recently_active():
@@ -170,3 +174,28 @@ def test_hook_alive_detects_live_and_dead(monkeypatch):
     assert svc._hook_alive() is True
     monkeypatch.setattr(svc, "_inject_canary", lambda: None)
     assert svc._hook_alive() is False
+
+
+def test_insert_key_fires_only_while_recording(monkeypatch):
+    """The dedicated suppressing insert hook fires the clipboard insert only
+    during an active recording, once per press (OS key-repeat must not re-fire
+    until the key is released)."""
+    svc, calls, held = _make(monkeypatch)
+    ins: list = []
+    svc.on_clipboard_insert = lambda: ins.append(1)
+
+    svc._on_insert_key(_evt("n", "down"))         # not recording yet
+    assert ins == []
+
+    held |= {"win", "shift"}                      # start push-to-talk
+    svc._on_event(_evt("left windows", "down"))
+    svc._on_event(_evt("left shift", "down"))
+    svc._ptt_commit()
+    assert svc._ptt_active
+
+    svc._on_insert_key(_evt("n", "down"))         # insert
+    svc._on_insert_key(_evt("n", "down"))         # OS key-repeat -> ignored
+    assert ins == [1]
+    svc._on_insert_key(_evt("n", "up"))
+    svc._on_insert_key(_evt("n", "down"))         # deliberate second press
+    assert ins == [1, 1]

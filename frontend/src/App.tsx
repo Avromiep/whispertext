@@ -6,7 +6,6 @@ import { SettingsContext, useSettingsProvider } from "./hooks/useSettings";
 import { useBackendEvents, WTEvent } from "./lib/ws";
 import { bridge } from "./lib/api";
 import { cn, WiggleText } from "./components/ui";
-import CommandPalette from "./components/CommandPalette";
 import Onboarding from "./pages/Onboarding";
 import HomePage from "./pages/HomePage";
 import DictationPage from "./pages/DictationPage";
@@ -42,7 +41,6 @@ let toastSeq = 0;
 export default function App() {
   const ctx = useSettingsProvider();
   const [page, setPage] = useState<PageId>("home");
-  const [paletteOpen, setPaletteOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [status, setStatus] = useState("idle");
 
@@ -82,10 +80,9 @@ export default function App() {
       "--font-scale", String(ctx.settings?.general.font_scale ?? 1));
   }, [ctx.settings?.general.theme, ctx.settings?.general.font_scale]);
 
-  // Keyboard-first: Ctrl+K command palette, Ctrl+1..9 page jumps
+  // Keyboard-first: Ctrl+1..9 jump between pages.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key.toLowerCase() === "k") { e.preventDefault(); setPaletteOpen((v) => !v); }
       if (e.ctrlKey && /^[1-9]$/.test(e.key)) {
         const target = NAV[Number(e.key) - 1];
         if (target) { e.preventDefault(); setPage(target.id); }
@@ -163,8 +160,6 @@ export default function App() {
           </div>
         </main>
       </div>
-
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} go={setPage} notify={pushToast} />
 
       {/* Toasts */}
       <div className="fixed bottom-4 right-4 space-y-2 z-50" role="status" aria-live="polite">

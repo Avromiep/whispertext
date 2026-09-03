@@ -30,6 +30,9 @@ class HotkeySettings(BaseModel):
     toggle_key: str = "right ctrl"
     double_tap_window_ms: int = 350
     open_settings: str = "ctrl+alt+w"
+    # While holding push-to-talk and dictating, tapping this key splices the
+    # clipboard into the transcript at that point (default Win+Shift+N).
+    clipboard_insert_key: str = "n"
     hands_free_enabled: bool = True
     # Hands-free ends itself when you stop talking, so there's no need to
     # double-tap again. Off falls back to manual double-tap-to-stop only.

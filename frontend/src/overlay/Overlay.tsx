@@ -25,6 +25,8 @@ export default function Overlay() {
   const [elapsed, setElapsed] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
   const [partial, setPartial] = useState("");   // live Deepgram preview text
+  const [clipN, setClipN] = useState(0);        // bumped when clipboard is inserted
+  const [clipShown, setClipShown] = useState(false);
   const level = useRef(0);          // live mic level 0..1 (smoothed in draw loop)
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -55,6 +57,10 @@ export default function Overlay() {
     }
     if (e.type === "audio_level" && typeof e.level === "number") {
       level.current = e.level;
+      return;
+    }
+    if (e.type === "clip_inserted") {
+      setClipN((n) => n + 1);
       return;
     }
     if (e.type === "partial") {
@@ -118,6 +124,15 @@ export default function Overlay() {
     const el = previewRef.current;
     if (el) el.scrollLeft = el.scrollWidth;
   }, [partial]);
+
+  // Briefly flash a clipboard cue when an insert lands, so you get feedback
+  // mid-recording (before the text is typed out on release).
+  useEffect(() => {
+    if (clipN === 0) return;
+    setClipShown(true);
+    const t = setTimeout(() => setClipShown(false), 1300);
+    return () => clearTimeout(t);
+  }, [clipN]);
 
   // Strand waveform animation
   useEffect(() => {
@@ -223,7 +238,9 @@ export default function Overlay() {
               <canvas ref={canvasRef} className="h-[64px] flex-1" aria-hidden="true" />
               <div className="shrink-0 w-[74px] text-right">
                 {state === "listening" && (
-                  <span className="text-xs font-mono text-muted tabular-nums">{mmss}</span>
+                  clipShown
+                    ? <span className="text-sm animate-scale-in" role="img" aria-label="Clipboard inserted">📋</span>
+                    : <span className="text-xs font-mono text-muted tabular-nums">{mmss}</span>
                 )}
                 {processing && (
                   <span className="flex items-center justify-end gap-1.5 text-xs text-muted">

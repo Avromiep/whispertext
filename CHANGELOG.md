@@ -3,6 +3,23 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.59] — 2026-08-30
+
+### Added
+- **Paste your clipboard mid-dictation.** While holding your dictation shortcut,
+  tap **N** (Win+Shift+N) at the moment you want your clipboard dropped into the
+  sentence — keep talking, and on release it comes out spliced in right where you
+  pressed, e.g. "The meeting is at **[pasted address]** on Tuesday." A 📋 flashes
+  in the recording pill to confirm. The key is suppressed while recording, so it
+  never leaves a stray character in your app. (Deepgram splices it in position;
+  batch engines append it at the end.)
+
+### Removed
+- **Hands-free mode** — removed from the Hotkeys page and hard-disabled, so a
+  double-tap can no longer start a recording by accident.
+- **The Ctrl+K command palette** — removed entirely, so it can't clash with a
+  Ctrl+K shortcut from another app.
+
 ## [1.0.58] — 2026-08-30
 
 ### Added

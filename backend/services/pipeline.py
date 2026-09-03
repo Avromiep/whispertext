@@ -10,6 +10,8 @@ import asyncio
 import threading
 import time
 
+import pyperclip
+
 from backend.models.settings import load_settings
 from backend.services import deepgram_service
 from backend.services.audio_service import audio_service, speech_seconds
@@ -47,6 +49,7 @@ class DictationPipeline:
         self._test_mode = False
         self._dg_session = None                # active Deepgram live session, if any
         self._last_partial = ""                # last live-preview text sent to overlay
+        self._clip_inserts: list[str] = []     # clipboard inserts (batch-engine fallback)
         # Persistent loop: keeps provider HTTP connection pools warm between
         # dictations (asyncio.run would tear them down every time).
         self._loop = asyncio.new_event_loop()
@@ -75,6 +78,32 @@ class DictationPipeline:
     def set_test_mode(self, enabled: bool) -> None:
         self._test_mode = enabled
 
+    def clipboard_insert(self) -> None:
+        """Insert-key pressed mid-dictation: snapshot the clipboard and splice it
+        into the transcript at this point. Deepgram splices it in position; batch
+        engines append it at the end (they have no live position to splice at)."""
+        if not audio_service.is_recording:
+            return
+        try:
+            text = (pyperclip.paste() or "").strip()
+        except Exception as exc:
+            log.warning("Clipboard read failed: %s", exc)
+            return
+        if not text:
+            bus.notify("Clipboard is empty — nothing to insert.", "info")
+            return
+        session = self._dg_session
+        if session is not None:
+            session.insert_clipboard(text)
+            # Flush the words spoken so far so the clip lands at the press point.
+            try:
+                asyncio.run_coroutine_threadsafe(session.finalize(), self._loop)
+            except Exception as exc:
+                log.debug("Deepgram finalize failed: %s", exc)
+        else:
+            self._clip_inserts.append(text)
+        bus.publish("clip_inserted", {"chars": len(text)})
+
     def toggle(self) -> None:
         """Double-tap: start hands-free recording, or stop it if already going.
 
@@ -102,6 +131,7 @@ class DictationPipeline:
         except RuntimeError as exc:
             bus.error(str(exc), code="no_microphone")
             return
+        self._clip_inserts = []                 # fresh per dictation
         bus.status("listening", hands_free=hands_free)
         cfg = load_settings()
         if cfg.whisper.engine == "deepgram":
@@ -228,6 +258,11 @@ class DictationPipeline:
         try:
             bus.status("transcribing")
             result = self._transcribe(audio)
+            # Deepgram splices clipboard inserts in position; a batch engine has
+            # no live position, so append them to the end here instead.
+            if self._clip_inserts:
+                result.text = (result.text + " " + " ".join(self._clip_inserts)).strip()
+                self._clip_inserts = []
             t_whisper = time.monotonic() - t0
             if not result.text or self._is_hallucination(result.text, audio):
                 self._report_no_speech()

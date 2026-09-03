@@ -16,8 +16,8 @@ from backend.utils.logger import get_logger
 log = get_logger(__name__)
 
 # Overlay state machine: idle -> listening -> transcribing -> cleaning -> typing -> done
-EVENT_TYPES = {"status", "audio_level", "partial", "error", "notification",
-               "settings_changed", "model_download", "test_result"}
+EVENT_TYPES = {"status", "audio_level", "partial", "clip_inserted", "error",
+               "notification", "settings_changed", "model_download", "test_result"}
 
 
 class EventBus:
