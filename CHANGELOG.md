@@ -3,6 +3,37 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.60] — 2026-09-09
+
+### Added
+- **Copy Last Dictation from the tray.** A new item at the bottom of the tray
+  menu (under Quit) copies your most recent dictation to the clipboard. The tray
+  briefly shows a "✓ Copied" confirmation instead of a Windows notification.
+- **Local API is now token-protected.** The backend on port 43117 now rejects any
+  request that doesn't carry a per-launch secret token, so a random web page or
+  other process that merely knows the port can no longer reach your dictation
+  service. The app authenticates automatically; you won't notice a thing.
+
+### Changed
+- **Opens to Home.** Launching WhisperText (or opening it from the tray) now takes
+  you to the Home page — unless the window is already open, in which case it stays
+  right where you left it.
+- **Times keep their natural form.** Spoken times like "7:40" are now typed as
+  `7:40` instead of `07:40`.
+- **Real filler-word removal.** When "Remove filler words" is on, spoken "um",
+  "uh", "er", and "ehm" are actually stripped out (with conservative word
+  boundaries so real words are never touched).
+
+### Fixed
+- **Auto-update and telemetry toggles now do what they say.** The auto-update
+  setting is honored on startup and the periodic check; the dead Telemetry toggle
+  was removed.
+- **Cleaner shutdown of interrupted live sessions.** A Deepgram streaming session
+  that gets cut off is now properly discarded instead of lingering.
+- Minor internal hardening: Gemini API key moved out of the request URL into a
+  header, `file://` paths with spaces load correctly, and sensitive text is
+  redacted to a character count in the logs.
+
 ## [1.0.59] — 2026-08-30
 
 ### Added

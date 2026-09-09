@@ -14,6 +14,37 @@ def strip_trailing_ellipsis(text: str) -> str:
     return _TRAILING_ELLIPSIS.sub("", text)
 
 
+# Deepgram's smart_format zero-pads the HOUR of a clock time ("seven forty" ->
+# "07:40"), but speakers want the natural "7:40". Drop only a leading-zero hour
+# (01-09); minutes/seconds keep their padding ("10:07" is untouched, "07:05" ->
+# "7:05"). Restricted to a real time shape so it can't touch unrelated numbers.
+_LEADING_ZERO_TIME = re.compile(r"\b0([1-9]):([0-5]\d)(:[0-5]\d)?\b")
+
+
+def strip_time_leading_zero(text: str) -> str:
+    return _LEADING_ZERO_TIME.sub(r"\1:\2\3", text)
+
+
+# Vocalized pauses ("um", "uh", "er", "erm", "ehm" and their run-ons). Deepgram
+# already omits most of these, but Whisper/Groq transcribe them literally. The
+# set is deliberately conservative — only sounds that are essentially never
+# intended words — and the boundaries (no adjacent word char or hyphen) keep
+# real words safe: "umbrella", "her", "uh-huh" are untouched.
+# Also eat a comma the model tends to attach to a filler ("Um, ..."), so the
+# clause reads cleanly rather than leaving a dangling comma.
+_FILLER_WORDS = re.compile(
+    r"(?<![\w-])(?:u[mh]+|erm?|ehm)(?![\w-])\s*,?\s*", re.IGNORECASE)
+
+
+def remove_filler_words(text: str) -> str:
+    out = _FILLER_WORDS.sub(" ", text)             # space, so words never glue
+    out = re.sub(r"\s{2,}", " ", out)              # collapse doubled spaces
+    out = re.sub(r"\s+([,.!?;:])", r"\1", out)     # no space before punctuation
+    out = re.sub(r",\s*,", ",", out)               # collapse doubled commas
+    out = re.sub(r"^[\s,]+", "", out)              # no leading space/comma
+    return out.strip()
+
+
 # Split after sentence-ending punctuation followed by whitespace. A decimal like
 # "3.14" has no space after the dot, so it isn't split.
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")

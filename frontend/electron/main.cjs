@@ -3,9 +3,10 @@
  * Owns: Python backend lifecycle, system tray, settings window, and the
  * transparent always-on-top recording overlay.
  */
-const { app, BrowserWindow, Tray, Menu, ipcMain, shell, nativeImage, screen, Notification, dialog } = require("electron");
+const { app, BrowserWindow, Tray, Menu, ipcMain, shell, nativeImage, screen, Notification, dialog, clipboard } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
+const { pathToFileURL } = require("url");
 const fs = require("fs");
 const http = require("http");
 const net = require("net");
@@ -33,7 +34,7 @@ app.setAppUserModelId(app.isPackaged ? "com.whispertext.app" : "WhisperText");
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on("second-instance", () => showSettings());
+  app.on("second-instance", () => showSettings({ home: true }));
 }
 
 // ------------------------------------------------------------------- backend
@@ -119,12 +120,24 @@ function notifyBackendDown() {
 
 // -------------------------------------------------------------------- windows
 function pageUrl(page) {
-  return DEV ? `${DEV_URL}/${page}` : `file://${path.join(__dirname, "..", "dist", page)}`;
+  // pathToFileURL encodes the path (spaces -> %20 etc.), so an install directory
+  // with a space no longer produces an invalid file:// URL and a blank window.
+  return DEV ? `${DEV_URL}/${page}` : pathToFileURL(path.join(__dirname, "..", "dist", page)).href;
 }
 
-function showSettings() {
+// home=true: opening the app (launch, tray, dock icon) should land on Home — but
+// only when the window wasn't already on screen. If it's already visible and you
+// click again (not realizing it's open), stay where you were.
+function showSettings({ home = false } = {}) {
   if (settingsWin && !settingsWin.isDestroyed()) {
-    settingsWin.show(); settingsWin.focus(); return;
+    const wasVisible = settingsWin.isVisible();
+    settingsWin.show(); settingsWin.focus();
+    if (home && !wasVisible) {
+      const wc = settingsWin.webContents;
+      if (wc.isLoading()) wc.once("did-finish-load", () => wc.send("navigate", "home"));
+      else wc.send("navigate", "home");
+    }
+    return;
   }
   settingsWin = new BrowserWindow({
     width: 1080, height: 720, minWidth: 900, minHeight: 600,
@@ -191,7 +204,7 @@ ipcMain.on("overlay:show", () => {
 ipcMain.on("overlay:hide", () => {
   if (overlayWin && !overlayWin.isDestroyed()) overlayWin.hide();
 });
-ipcMain.on("app:open-settings", () => showSettings());
+ipcMain.on("app:open-settings", () => showSettings({ home: true }));
 ipcMain.handle("app:get-login-item", () => app.getLoginItemSettings().openAtLogin);
 ipcMain.handle("app:set-login-item", (_e, enabled) => {
   app.setLoginItemSettings({ openAtLogin: enabled, path: process.execPath });
@@ -301,6 +314,19 @@ function checkForUpdates(download = false) {
   try { getUpdater().checkForUpdates().catch(() => {}); } catch { /* updater unavailable */ }
 }
 
+// The automatic startup / 6-hour checks respect the "Automatic updates" toggle;
+// a manual "Check for Updates" always runs regardless.
+function autoUpdateEnabled() {
+  try {
+    const p = path.join(app.getPath("appData"), "WhisperText", "settings.json");
+    const s = JSON.parse(fs.readFileSync(p, "utf-8"));
+    return s?.general?.auto_update !== false;   // default on
+  } catch { return true; }
+}
+function checkForUpdatesIfEnabled() {
+  if (autoUpdateEnabled()) checkForUpdates(false);
+}
+
 ipcMain.handle("updates:check", () => { checkForUpdates(false); return updateState; });
 ipcMain.handle("updates:start", () => { checkForUpdates(true); return updateState; });
 ipcMain.handle("updates:get-state", () => updateState);
@@ -319,10 +345,70 @@ ipcMain.on("updates:install", () => {
 });
 
 // ------------------------------------------------------------------------ tray
+// The backend requires a per-launch token (written to this file). Read it fresh
+// each call so a backend restart (new token) is picked up automatically.
+function apiTokenPath() {
+  return path.join(app.getPath("appData"), "WhisperText", "api-token");
+}
+function readApiToken() {
+  try { return fs.readFileSync(apiTokenPath(), "utf-8").trim(); } catch { return ""; }
+}
+ipcMain.handle("app:get-token", () => readApiToken());
+
 function apiPost(pathname) {
-  const req = http.request({ host: "127.0.0.1", port: BACKEND_PORT, path: pathname, method: "POST" });
+  const req = http.request({ host: "127.0.0.1", port: BACKEND_PORT, path: pathname, method: "POST",
+    headers: { "X-WT-Token": readApiToken() } });
   req.on("error", () => {});
   req.end();
+}
+
+function apiGetJson(pathname, cb) {
+  const req = http.request({ host: "127.0.0.1", port: BACKEND_PORT, path: pathname, method: "GET",
+    headers: { "X-WT-Token": readApiToken() } }, (res) => {
+    let data = "";
+    res.on("data", (c) => { data += c; });
+    res.on("end", () => { try { cb(JSON.parse(data)); } catch { cb(null); } });
+  });
+  req.on("error", () => cb(null));
+  req.end();
+}
+
+let rebuildTray = () => {};
+const TRAY_TOOLTIP = "WhisperText — AI dictation";
+
+// Non-intrusive feedback (no Windows notification). A tray menu closes the
+// instant you click an item, so briefly swap in a tiny "Copied" menu, pop it up
+// at the cursor, and auto-close it after ~1s — the tray visibly confirms the
+// copy for a beat — then restore the real menu.
+let copiedTimer = null;
+function showCopiedToast(label) {
+  if (!tray) return;
+  const menu = Menu.buildFromTemplate([{ label, enabled: false }]);
+  clearTimeout(copiedTimer);
+  setTimeout(() => {
+    try {
+      tray.setContextMenu(menu);
+      tray.popUpContextMenu();
+      copiedTimer = setTimeout(() => {
+        try { tray.closeContextMenu(); } catch { /* ignore */ }
+        rebuildTray();
+      }, 1100);
+    } catch { rebuildTray(); }
+  }, 50);
+}
+
+// Copy the most recent dictation straight to the clipboard from the tray — no
+// need to open History and double-click the entry.
+function copyLastDictation() {
+  apiGetJson("/history?limit=1", (rows) => {
+    const text = Array.isArray(rows) && rows[0] && rows[0].final_text;
+    if (text) {
+      clipboard.writeText(text);
+      showCopiedToast("✓ Copied last dictation!");
+    } else {
+      showCopiedToast("No dictation to copy yet");
+    }
+  });
 }
 
 function navigateTo(page) {
@@ -341,7 +427,7 @@ function trayIcon() {
 let hotkeysPaused = false;
 function createTray() {
   tray = new Tray(trayIcon());
-  tray.setToolTip("WhisperText — AI dictation");
+  tray.setToolTip(TRAY_TOOLTIP);
   const rebuild = () => tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Start Dictation", click: () => apiPost("/dictation/toggle") },
     {
@@ -349,15 +435,18 @@ function createTray() {
       click: () => { hotkeysPaused = !hotkeysPaused; apiPost(`/dictation/pause?paused=${hotkeysPaused}`); rebuild(); },
     },
     { type: "separator" },
-    { label: "Settings", click: () => showSettings() },
+    { label: "Settings", click: () => showSettings({ home: true }) },
     { label: "History", click: () => navigateTo("history") },
     { type: "separator" },
     { label: "Check for Updates", click: () => { checkForUpdates(); navigateTo("about"); } },
     { label: "Restart", click: () => { quitting = true; stopBackend(); app.relaunch(); app.exit(0); } },
     { label: "Quit", click: () => { quitting = true; app.quit(); } },
+    { type: "separator" },
+    { label: "Copy Last Dictation", click: () => copyLastDictation() },
   ]));
+  rebuildTray = rebuild;
   rebuild();
-  tray.on("double-click", () => showSettings());
+  tray.on("double-click", () => showSettings({ home: true }));
 }
 
 // ----------------------------------------------------------------------- boot
@@ -383,8 +472,8 @@ app.whenReady().then(() => {
   createTray();
   showSettings();
 
-  checkForUpdates();
-  setInterval(checkForUpdates, 6 * 3600 * 1000);
+  checkForUpdatesIfEnabled();
+  setInterval(checkForUpdatesIfEnabled, 6 * 3600 * 1000);
 });
 
 app.on("window-all-closed", () => { /* tray app: stay alive with no windows */ });

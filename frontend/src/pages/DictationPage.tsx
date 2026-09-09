@@ -93,12 +93,10 @@ export default function DictationPage() {
         />
       </Section>
 
-      <Section title="Cleanup & formatting" description="Applied by the AI cleanup stage.">
-        <Toggle label="Automatically capitalize" description="Sentence-start capitalization"
+      <Section title="Cleanup & formatting" description="How your transcript is tidied up before it's typed.">
+        <Toggle label="Automatically capitalize" description="Capitalize the start of your text"
           checked={f.auto_capitalize} onChange={(v) => patch({ formatting: { auto_capitalize: v } })} />
-        <Toggle label="Automatically punctuate" description="Add commas, periods, and question marks"
-          checked={f.auto_punctuate} onChange={(v) => patch({ formatting: { auto_punctuate: v } })} />
-        <Toggle label="Remove filler words" description={'Strip "um", "uh", "like", false starts'}
+        <Toggle label="Remove filler words" description={'Strip "um", "uh", "er" and similar'}
           checked={f.remove_fillers} onChange={(v) => patch({ formatting: { remove_fillers: v } })} />
         <Toggle label="Smart paragraph detection" description="Break paragraphs at topic changes"
           checked={f.smart_paragraphs} onChange={(v) => patch({ formatting: { smart_paragraphs: v } })} />

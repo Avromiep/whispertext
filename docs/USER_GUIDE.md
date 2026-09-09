@@ -5,8 +5,8 @@
 | Action | How |
 |---|---|
 | Push-to-talk | Hold **Win+Shift**, speak, release |
-| Hands-free | Double-tap **Right Ctrl**; double-tap again to finish |
-| From the tray | Right-click the tray icon → *Start Dictation* |
+| Insert clipboard | While holding **Win+Shift**, tap **N** to drop your clipboard into the sentence at that point |
+| From the tray | Right-click the tray icon → *Start Dictation* (records until you click it again) |
 
 While recording, a small overlay appears near the bottom of the screen with a
 live waveform and timer. When you stop, it walks through *Transcribing →
@@ -26,8 +26,7 @@ You'll rarely need it after setup. Open it by double-clicking the tray icon.
   Cloud/Local/Hybrid mode, cost-saving and offline switches.
 - **Audio** — microphone picker, live level meter, noise/gain/trim toggles,
   one-click mic test.
-- **Hotkeys** — rebind push-to-talk and the hands-free toggle; tune the
-  double-tap window.
+- **Hotkeys** — rebind push-to-talk.
 - **History** — searchable past dictations with favorites, delete, CSV export.
   Turn *Save dictation history* off for full privacy mode.
 - **Models** — download/switch/delete Whisper models; shows GPU status and a
@@ -35,9 +34,7 @@ You'll rarely need it after setup. Open it by double-clicking the tray icon.
 - **Advanced** — theme, font scale, launch on boot, auto-update, debug logs.
 - **About** — versions, hardware, update check.
 
-Press **Ctrl+K** anywhere in the window for the command palette: switch
-providers, toggle cleanup, jump to pages — all from the keyboard.
-**Ctrl+1…9** jumps straight to a page.
+Press **Ctrl+1…9** to jump straight to a page.
 
 ## Choosing an AI setup
 
@@ -53,8 +50,9 @@ providers, toggle cleanup, jump to pages — all from the keyboard.
 
 - **"No microphone detected"** — check the device in Audio settings, then
   *Test microphone*.
-- **Text doesn't appear in some app** — switch Typing method to *clipboard*
-  in Dictation settings; some apps block simulated keystrokes.
+- **Text doesn't appear in some app** — text is inserted via clipboard paste by
+  default; a few apps ignore Ctrl+V. For those, switch Typing method to
+  *keystrokes* in Dictation settings.
 - **Slow transcription** — pick a smaller Whisper model (Models page), or
   reduce beam size (Advanced).
 - **Something else** — Advanced → *Export logs* and inspect

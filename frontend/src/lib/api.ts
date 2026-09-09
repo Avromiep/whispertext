@@ -2,11 +2,32 @@
 export const API_BASE = "http://127.0.0.1:43117";
 export const WS_URL = "ws://127.0.0.1:43117/ws";
 
+// The backend requires a per-launch token; the Electron main process reads it
+// from the token file and hands it over. Cached, with a reload path for when the
+// backend restarts with a fresh token (our requests then start 401-ing).
+let _tokenPromise: Promise<string> | null = null;
+export function apiToken(reload = false): Promise<string> {
+  if (reload) _tokenPromise = null;
+  if (!_tokenPromise) {
+    _tokenPromise = (async () => {
+      try { return (await bridge?.getApiToken?.()) ?? ""; } catch { return ""; }
+    })();
+  }
+  return _tokenPromise;
+}
+
+/** WS URL carrying the token in the query string (browsers can't set WS headers). */
+export async function wsUrl(): Promise<string> {
+  return `${WS_URL}?token=${encodeURIComponent(await apiToken())}`;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
+  const send = (tok: string) => fetch(`${API_BASE}${path}`, {
     ...init,
+    headers: { "Content-Type": "application/json", "X-WT-Token": tok, ...(init?.headers as Record<string, string>) },
   });
+  let res = await send(await apiToken());
+  if (res.status === 401) res = await send(await apiToken(true));   // stale token -> reload once
   if (!res.ok) {
     let detail = res.statusText;
     try { detail = (await res.json()).message ?? detail; } catch { /* keep statusText */ }
@@ -85,6 +106,7 @@ export interface UpdateState {
 /** Bridge exposed by the Electron preload script (absent in plain-browser dev). */
 export interface WTBridge {
   showOverlay(): void; hideOverlay(): void; openSettings(): void;
+  getApiToken(): Promise<string>;
   openExternal(url: string): void; restart(): void;
   getLoginItem(): Promise<boolean>; setLoginItem(v: boolean): Promise<boolean>;
   checkUpdates(): Promise<UpdateState>;

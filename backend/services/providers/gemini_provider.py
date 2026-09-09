@@ -27,9 +27,12 @@ class GeminiProvider(AIProvider):
         if self.config.model.startswith(_THINKING_CAPABLE_PREFIXES):
             generation_config["thinkingConfig"] = {"thinkingBudget": 0}
 
+        # Key goes in the header, NOT the URL query: an httpx error repr includes
+        # the request URL and can reach logs / Test Connection, so a "?key=" would
+        # leak the secret. `x-goog-api-key` is Google's supported header form.
         r = await self.client.post(
             f"{API_BASE}/models/{self.config.model}:generateContent",
-            params={"key": self.api_key or ""},
+            headers={"x-goog-api-key": self.api_key or ""},
             json={
                 "system_instruction": {"parts": [{"text": system}]},
                 "contents": [{"role": "user", "parts": [{"text": user}]}],
@@ -46,7 +49,7 @@ class GeminiProvider(AIProvider):
 
     async def list_models(self) -> list[str]:
         r = await self.client.get(f"{API_BASE}/models",
-                                  params={"key": self.api_key or ""})
+                                  headers={"x-goog-api-key": self.api_key or ""})
         r.raise_for_status()
         return sorted(
             m["name"].removeprefix("models/")

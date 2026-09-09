@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("whispertext", {
   openSettings: () => ipcRenderer.send("app:open-settings"),
   openExternal: (url) => ipcRenderer.send("app:open-external", url),
   restart: () => ipcRenderer.send("app:restart"),
+  getApiToken: () => ipcRenderer.invoke("app:get-token"),
   getLoginItem: () => ipcRenderer.invoke("app:get-login-item"),
   setLoginItem: (v) => ipcRenderer.invoke("app:set-login-item", v),
   checkUpdates: () => ipcRenderer.invoke("updates:check"),

@@ -1065,7 +1065,7 @@ class TestGeminiProvider:
         captured = {}
 
         class FakeClient:
-            async def post(self, url, params=None, json=None):
+            async def post(self, url, headers=None, json=None):
                 captured["json"] = json
                 return FakeResponse()
 
@@ -1086,7 +1086,7 @@ class TestGeminiProvider:
         captured = {}
 
         class FakeClient:
-            async def post(self, url, params=None, json=None):
+            async def post(self, url, headers=None, json=None):
                 captured["json"] = json
                 return FakeResponse()
 
@@ -1369,3 +1369,41 @@ class TestClipboardInsert:
         dl.insert_clipboard("")
         self._final(dl, "One.")
         assert dl._assemble() == "One."
+
+
+class TestTimeFormat:
+    """Spoken clock times keep the natural hour ("7:40"), not Deepgram's zero-
+    padded "07:40" — but minutes/seconds and two-digit hours are untouched."""
+
+    @pytest.mark.parametrize("text,expected", [
+        ("Meet at 07:40 today.", "Meet at 7:40 today."),
+        ("It is 7:40 now", "It is 7:40 now"),            # already fine
+        ("The 08:05 train", "The 8:05 train"),
+        ("At 10:07 sharp", "At 10:07 sharp"),            # hour 10, minute keeps 0
+        ("From 07:40 to 12:30.", "From 7:40 to 12:30."), # 12:30 untouched
+        ("07:40:30 elapsed", "7:40:30 elapsed"),         # with seconds
+        ("Call at 07:40 PM.", "Call at 7:40 PM."),
+        ("badge 07 and 3", "badge 07 and 3"),            # standalone 07 untouched
+    ])
+    def test_leading_zero_hour(self, text, expected):
+        from backend.utils.text import strip_time_leading_zero
+        assert strip_time_leading_zero(text) == expected
+
+
+class TestFillerRemoval:
+    """Deterministic filler stripping — works with AI cleanup off, never damages
+    real words."""
+
+    @pytest.mark.parametrize("text,expected", [
+        ("Um, I think uh we should go.", "I think we should go."),
+        ("I um, uh, really think so", "I really think so"),
+        ("Send it to um John", "Send it to John"),
+        ("Erm, maybe later", "maybe later"),
+        ("her umbrella is uh nice", "her umbrella is nice"),  # real words safe
+        ("uh-huh, okay", "uh-huh, okay"),                     # hyphenated safe
+        ("no fillers here", "no fillers here"),
+        ("The answer is 42.", "The answer is 42."),
+    ])
+    def test_remove(self, text, expected):
+        from backend.utils.text import remove_filler_words
+        assert remove_filler_words(text) == expected

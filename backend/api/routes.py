@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from backend.config import (APP_VERSION, LOG_DIR, SUPPORTED_LANGUAGES)
+from backend.utils.api_token import token_ok
 from backend.models.settings import load_settings, update_settings
 from backend.services.audio_service import audio_service
 from backend.services.event_bus import bus
@@ -318,6 +319,11 @@ HEARTBEAT_S = 5.0
 
 @router.websocket("/ws")
 async def websocket_events(ws: WebSocket) -> None:
+    # The HTTP middleware can't see WebSocket upgrades, so check the token here
+    # (browsers can't set custom WS headers, so it rides in the query string).
+    if not token_ok(ws.query_params.get("token")):
+        await ws.close(code=1008)   # policy violation
+        return
     await ws.accept()
     q = bus.subscribe()
     try:

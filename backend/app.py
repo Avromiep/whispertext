@@ -12,11 +12,13 @@ from contextlib import asynccontextmanager
 
 import numpy as np
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from backend.api.routes import router
 from backend.config import APP_VERSION, BACKEND_HOST, BACKEND_PORT
+from backend.utils.api_token import ensure_token, token_ok
 from backend.models.settings import load_settings
 from backend.services.audio_service import speech_seconds
 from backend.services.event_bus import bus
@@ -53,6 +55,7 @@ async def lifespan(app: FastAPI):
     settings = load_settings()
     setup_logging(debug=settings.general.debug_mode)
     log.info("WhisperText backend %s starting", APP_VERSION)
+    ensure_token()          # fresh local-API token before the server serves anything
     migrate_legacy_keys()
 
     bus.attach_loop(asyncio.get_running_loop())
@@ -79,6 +82,24 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="WhisperText", version=APP_VERSION, lifespan=lifespan)
+
+# Endpoints reachable without the token: only the liveness check, so the app can
+# always tell the backend is up before it has read the token.
+_OPEN_PATHS = {"/health"}
+
+
+@app.middleware("http")
+async def require_api_token(request: Request, call_next):
+    """Reject any request that doesn't carry the shared local-API token. Blocks
+    a web page or other process that merely knows the port. OPTIONS (CORS
+    preflight) and the health check pass through."""
+    if request.method == "OPTIONS" or request.url.path in _OPEN_PATHS:
+        return await call_next(request)
+    if not token_ok(request.headers.get("x-wt-token")):
+        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+    return await call_next(request)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "app://."],

@@ -9,11 +9,12 @@ editors, no switching windows.
 ## How it works
 
 ```
-Global hotkey → record (in RAM) → Faster-Whisper → AI cleanup → simulated typing
+Global hotkey → record (in RAM) → transcribe → AI cleanup → insert (clipboard paste)
 ```
 
 - **Push-to-talk**: hold `Win+Shift`, speak, release.
-- **Hands-free**: double-tap `Right Ctrl` to start, double-tap again to stop.
+- **Clipboard insert**: while holding the shortcut, tap `N` to drop your
+  clipboard into the sentence at that point.
 - Every stage streams status to a floating overlay (waveform → transcribing →
   cleaning → typing).
 - The AI stage fixes grammar, punctuation, and filler words — it never invents
@@ -29,11 +30,12 @@ Global hotkey → record (in RAM) → Faster-Whisper → AI cleanup → simulate
   with automatic failover, cost-minimizing mode, and full offline mode.
 - **8 style presets**: Professional, Friendly, Executive, Technical, Medical,
   Legal, Academic, Creative — plus custom instructions.
-- **Typing engine**: simulated keystrokes with clipboard-paste fallback
-  (and clipboard restore).
+- **Typing engine**: inserts via clipboard paste by default (fast and reliable
+  everywhere, with clipboard restore); simulated keystrokes are an opt-in mode
+  for apps that ignore `Ctrl+V`.
 - **Privacy**: audio stays in RAM, API keys live in Windows Credential
   Manager, history is local SQLite and can be disabled entirely.
-- **Polish**: system tray, command palette (`Ctrl+K`), onboarding wizard,
+- **Polish**: system tray (with "Copy Last Dictation"), onboarding wizard,
   dark/light/system themes, hardware-aware local-model recommendations.
 
 ## Quick start (from source)

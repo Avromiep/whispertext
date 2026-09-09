@@ -1,6 +1,6 @@
 /** Auto-reconnecting WebSocket subscription to the backend event bus. */
 import { useEffect, useRef } from "react";
-import { WS_URL } from "./api";
+import { wsUrl } from "./api";
 
 export interface WTEvent {
   type: "status" | "audio_level" | "partial" | "clip_inserted" | "error" | "notification" | "settings_changed" | "model_download" | "test_result" | "heartbeat";
@@ -36,14 +36,19 @@ export function useBackendEvents(onEvent: (e: WTEvent) => void): void {
     const connect = () => {
       if (closed) return;
       lastSeen = Date.now();
-      ws = new WebSocket(WS_URL);
-      ws.onopen = () => { lastSeen = Date.now(); };
-      ws.onmessage = (m) => {
-        lastSeen = Date.now();
-        try { handler.current(JSON.parse(m.data) as WTEvent); } catch { /* ignore malformed */ }
-      };
-      ws.onclose = () => { if (!closed) retry = setTimeout(connect, RETRY_MS); };
-      ws.onerror = () => ws?.close();
+      // The backend requires the per-launch token in the query string (browsers
+      // can't set WS headers). wsUrl() resolves it via the Electron bridge.
+      void wsUrl().then((url) => {
+        if (closed) return;
+        ws = new WebSocket(url);
+        ws.onopen = () => { lastSeen = Date.now(); };
+        ws.onmessage = (m) => {
+          lastSeen = Date.now();
+          try { handler.current(JSON.parse(m.data) as WTEvent); } catch { /* ignore malformed */ }
+        };
+        ws.onclose = () => { if (!closed) retry = setTimeout(connect, RETRY_MS); };
+        ws.onerror = () => ws?.close();
+      });
     };
 
     // Sleep/resume can leave the socket readyState OPEN but permanently silent,

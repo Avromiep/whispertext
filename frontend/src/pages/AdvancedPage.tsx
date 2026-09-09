@@ -49,8 +49,8 @@ export default function AdvancedPage() {
       <Section title="Appearance">
         <Select label="Theme" value={g.theme} onChange={(v) => patch({ general: { theme: v as never } })}
           options={[
-            { value: "dark", label: "Dark (default)" },
-            { value: "light", label: "Light" },
+            { value: "light", label: "Light (default)" },
+            { value: "dark", label: "Dark" },
             { value: "system", label: "Follow system" },
           ]} />
         <div className="mt-3">
@@ -115,8 +115,6 @@ export default function AdvancedPage() {
       <Section title="Developer">
         <Toggle label="Debug mode" description="Verbose logging for troubleshooting"
           checked={g.debug_mode} onChange={(v) => patch({ general: { debug_mode: v } })} />
-        <Toggle label="Telemetry" description="Anonymous usage statistics (off by default)"
-          checked={g.telemetry} onChange={(v) => patch({ general: { telemetry: v } })} />
         <div className="mt-3">
           <Button size="sm" onClick={() => api.pauseHotkeys(false)}>Restart hotkey service</Button>
         </div>
