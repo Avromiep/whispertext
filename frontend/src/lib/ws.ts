@@ -1,6 +1,6 @@
 /** Auto-reconnecting WebSocket subscription to the backend event bus. */
 import { useEffect, useRef } from "react";
-import { wsUrl } from "./api";
+import { apiToken, wsUrl } from "./api";
 
 export interface WTEvent {
   type: "status" | "audio_level" | "partial" | "clip_inserted" | "error" | "notification" | "settings_changed" | "model_download" | "test_result" | "heartbeat";
@@ -40,13 +40,22 @@ export function useBackendEvents(onEvent: (e: WTEvent) => void): void {
       // can't set WS headers). wsUrl() resolves it via the Electron bridge.
       void wsUrl().then((url) => {
         if (closed) return;
+        let opened = false;
         ws = new WebSocket(url);
-        ws.onopen = () => { lastSeen = Date.now(); };
+        ws.onopen = () => { opened = true; lastSeen = Date.now(); };
         ws.onmessage = (m) => {
           lastSeen = Date.now();
           try { handler.current(JSON.parse(m.data) as WTEvent); } catch { /* ignore malformed */ }
         };
-        ws.onclose = () => { if (!closed) retry = setTimeout(connect, RETRY_MS); };
+        ws.onclose = () => {
+          if (closed) return;
+          // Closed before ever opening usually means the backend restarted with a
+          // fresh token and rejected our stale one. Refresh it so the retry uses
+          // the current token (REST self-heals the same way; the WS can't send a
+          // header, so the reloaded token rides the next reconnect's query string).
+          if (!opened) void apiToken(true);
+          retry = setTimeout(connect, RETRY_MS);
+        };
         ws.onerror = () => ws?.close();
       });
     };

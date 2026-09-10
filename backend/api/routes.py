@@ -322,6 +322,9 @@ async def websocket_events(ws: WebSocket) -> None:
     # The HTTP middleware can't see WebSocket upgrades, so check the token here
     # (browsers can't set custom WS headers, so it rides in the query string).
     if not token_ok(ws.query_params.get("token")):
+        # The client self-heals: it reloads the token and reconnects. Logged (no
+        # token value) so a stuck overlay is diagnosable.
+        log.info("WS connection rejected: missing/stale token")
         await ws.close(code=1008)   # policy violation
         return
     await ws.accept()

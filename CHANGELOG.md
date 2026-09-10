@@ -3,6 +3,16 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.61] — 2026-09-10
+
+### Fixed
+- **Recording pill is back.** After 1.0.60 added the local-API token, the overlay's
+  live connection couldn't recover if the backend restarted with a fresh token —
+  it would keep retrying with the old one, so the recording pill stopped appearing
+  (dictation still worked, since that runs in the background). The connection now
+  refreshes its token and reconnects automatically, exactly like the rest of the
+  app already did, so the pill always comes back.
+
 ## [1.0.60] — 2026-09-09
 
 ### Added
