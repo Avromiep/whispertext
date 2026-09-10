@@ -3,6 +3,14 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.62] — 2026-09-10
+
+### Changed
+- **See your clipboard text in the recording pill.** When you tap **N** to insert
+  the clipboard mid-dictation, the pill's live preview now shows the inserted text
+  right where it will land in your sentence — not just the 📋 icon — so you can
+  confirm what's being pasted as you keep talking.
+
 ## [1.0.61] — 2026-09-10
 
 ### Fixed

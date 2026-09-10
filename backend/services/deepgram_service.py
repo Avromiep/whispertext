@@ -133,6 +133,7 @@ class DeepgramLive:
         self._finals: list[str] = []
         self._inserts: list[tuple[int, str]] = []   # (finals-index, clipboard text) to splice
         self._pending_clip: list[str] = []          # clips awaiting the next finalized segment
+        self._last_tail = ""                         # current interim tail, for re-emitting on insert
         # Display-only callback fed the running transcript (committed finals plus
         # the current interim tail) so the overlay can show a live preview. Never
         # affects the returned transcript; guarded so a UI error can't break recv.
@@ -168,30 +169,45 @@ class DeepgramLive:
     async def finalize(self) -> None:
         """Ask Deepgram to finalize buffered audio now, so the words spoken up to
         the key press become a segment and the queued clip lands after them."""
+        # Runs on the loop thread (scheduled by the caller), so it's safe to touch
+        # the transcript lists here. Surface the just-queued clip in the live
+        # preview immediately, before Deepgram's finalize round-trip returns.
+        self._emit_interim(self._last_tail)
         try:
             if self._ws is not None:
                 await self._ws.send(json.dumps({"type": "Finalize"}))
         except Exception:
             pass
 
+    def _render(self, tail: str = "") -> str:
+        """Join finalized segments with clipboard inserts spliced in at the
+        segment index they were captured at; `tail` (the live, not-yet-final
+        words) is appended at the end. Non-mutating — shared by the final
+        assembly and the live preview so the preview shows each insert exactly
+        where it will land in the typed text."""
+        by_idx: dict[int, list[str]] = {}
+        for idx, txt in self._inserts:
+            by_idx.setdefault(idx, []).append(txt)
+        n = len(self._finals)
+        parts: list[str] = []
+        for i in range(n + 1):
+            parts.extend(by_idx.get(i, []))
+            if i == n:
+                parts.extend(self._pending_clip)   # not yet flushed into _inserts
+            if i < n:
+                parts.append(self._finals[i])
+        if tail:
+            parts.append(tail)
+        return " ".join(p for p in parts if p).strip()
+
     def _assemble(self) -> str:
-        """Join finalized segments with any clipboard inserts spliced in at the
-        segment index they were captured at."""
-        # Any clip still pending (its finalize produced no further final) goes at
-        # the current end so it's never dropped.
+        """The final transcript: flush any still-pending clip to the current end
+        so it's never dropped, then render."""
         if self._pending_clip:
             idx = len(self._finals)
             self._inserts.extend((idx, clip) for clip in self._pending_clip)
             self._pending_clip = []
-        by_idx: dict[int, list[str]] = {}
-        for idx, txt in self._inserts:
-            by_idx.setdefault(idx, []).append(txt)
-        parts: list[str] = []
-        for i in range(len(self._finals) + 1):
-            parts.extend(by_idx.get(i, []))
-            if i < len(self._finals):
-                parts.append(self._finals[i])
-        return " ".join(p for p in parts if p).strip()
+        return self._render()
 
     async def _send(self) -> None:
         while True:
@@ -237,13 +253,14 @@ class DeepgramLive:
             self._emit_interim(transcript)        # live, not-yet-final tail
 
     def _emit_interim(self, tail: str) -> None:
-        """Push the running transcript (committed finals + live tail) to the
-        display callback. Display-only: never touches what finish() returns."""
+        """Push the running transcript (committed finals, clipboard inserts, and
+        the live tail) to the display callback. Display-only: never touches what
+        finish() returns."""
+        self._last_tail = tail
         if self._on_interim is None:
             return
-        parts = self._finals + ([tail] if tail else [])
         try:
-            self._on_interim(" ".join(parts).strip())
+            self._on_interim(self._render(tail))
         except Exception:
             pass
 

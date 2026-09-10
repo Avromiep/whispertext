@@ -1279,6 +1279,7 @@ class TestDeepgramInterim:
         live._finals = []
         live._inserts = []
         live._pending_clip = []
+        live._last_tail = ""
         live._on_interim = seen.append
         return live, seen
 
@@ -1314,12 +1315,30 @@ class TestDeepgramInterim:
         assert seen == []
         assert live._finals == []
 
+    def test_preview_shows_queued_clipboard_insert(self):
+        """Tapping N surfaces the clip inline in the live preview (feedback
+        before it's typed), spliced where it will land in the text."""
+        live, seen = self._live()
+        live._handle_message(self._results("the meeting is at", True))
+        live.insert_clipboard("123 Main St")   # user taps N
+        live._emit_interim("")                  # finalize() emits this on the loop
+        assert seen[-1] == "the meeting is at 123 Main St"
+
+    def test_preview_keeps_insert_with_live_tail(self):
+        """The clip stays in the preview as the user keeps talking."""
+        live, seen = self._live()
+        live._handle_message(self._results("hello", True))
+        live.insert_clipboard("CLIP")
+        live._emit_interim("world")             # continued, not-yet-final speech
+        assert seen[-1] == "hello CLIP world"
+
     def test_interim_callback_error_is_swallowed(self):
         from backend.services.deepgram_service import DeepgramLive
         live = DeepgramLive.__new__(DeepgramLive)
         live._finals = []
         live._inserts = []
         live._pending_clip = []
+        live._last_tail = ""
         live._on_interim = lambda _t: (_ for _ in ()).throw(RuntimeError("ui boom"))
         # A display-side error must not propagate into the recv loop.
         live._handle_message(self._results("boom", True))
@@ -1337,6 +1356,7 @@ class TestClipboardInsert:
         dl._finals = []
         dl._inserts = []
         dl._pending_clip = []
+        dl._last_tail = ""
         dl._on_interim = None
         return dl
 
