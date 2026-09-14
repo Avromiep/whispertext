@@ -110,6 +110,18 @@ def get_active_window_title() -> str:
         return ""
 
 
+def is_remote_session() -> bool:
+    """True when THIS process is running inside a Remote Desktop (RDP) session
+    (live — reflects connect/disconnect, unlike the SESSIONNAME env var). Lets the
+    overlay honor the 'Remote Desktop compatibility' toggle only where it matters.
+    SM_REMOTESESSION = 0x1000. Best-effort — any failure reads as 'not remote'."""
+    try:
+        import ctypes
+        return bool(ctypes.windll.user32.GetSystemMetrics(0x1000))
+    except Exception:
+        return False
+
+
 class TypingService:
     def inject(self, text: str) -> str:
         """Insert `text` at the current caret. Returns the method used."""

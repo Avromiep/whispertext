@@ -31,6 +31,8 @@ export default function Overlay() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const startRef = useRef(0);
+  const rdpSessionRef = useRef(false);      // this dictation is happening over RDP
+  const overlayOverRdpRef = useRef(true);   // "Remote Desktop compatibility" setting
   const hideTimer = useRef<ReturnType<typeof setTimeout>>();
   const [dark, setDark] = useState(() => (localStorage.getItem("wt-resolved-theme") ?? "light") === "dark");
 
@@ -39,6 +41,7 @@ export default function Overlay() {
   // settings change since this window is created once and never reloaded.
   const syncTheme = () => {
     api.getSettings().then((s) => {
+      overlayOverRdpRef.current = s.general.overlay_over_rdp;
       const theme = s.general.theme;
       const isDark = theme === "dark" ||
         (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
@@ -77,6 +80,7 @@ export default function Overlay() {
     clearTimeout(hideTimer.current);
     switch (e.state) {
       case "listening":
+        rdpSessionRef.current = !!e.rdp_session;
         startRef.current = Date.now();
         setElapsed(0);
         transition("listening");
@@ -100,6 +104,12 @@ export default function Overlay() {
   });
 
   function transition(next: OverlayState) {
+    // Over RDP, show the pill only when "Remote Desktop compatibility" is on.
+    // (Not in a remote session, the toggle never suppresses it.)
+    if (next !== "hidden" && rdpSessionRef.current && !overlayOverRdpRef.current) {
+      bridge?.hideOverlay();
+      return;
+    }
     setState(next);
     if (next === "hidden") bridge?.hideOverlay();
     else bridge?.showOverlay();

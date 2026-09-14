@@ -19,7 +19,8 @@ from backend.services.event_bus import bus
 from backend.services.groq_whisper_service import (BACKUP_PROVIDER_ID, PROVIDER_ID,
                                                     groq_whisper_service)
 from backend.services.llm_service import llm_service
-from backend.services.typing_service import get_active_window_title, typing_service
+from backend.services.typing_service import (get_active_window_title,
+                                              is_remote_session, typing_service)
 from backend.services.window_context import get_active_context
 from backend.services.whisper_service import whisper_service
 from backend.storage.database import HistoryStore
@@ -133,7 +134,9 @@ class DictationPipeline:
             bus.error(str(exc), code="no_microphone")
             return
         self._clip_inserts = []                 # fresh per dictation
-        bus.status("listening", hands_free=hands_free)
+        # rdp_session lets the overlay honor the "Remote Desktop compatibility"
+        # toggle live: over RDP the pill shows only when the setting is on.
+        bus.status("listening", hands_free=hands_free, rdp_session=is_remote_session())
         cfg = load_settings()
         if cfg.whisper.engine == "deepgram":
             self._start_deepgram(cfg)

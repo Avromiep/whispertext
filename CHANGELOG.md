@@ -3,6 +3,16 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.64] — 2026-09-14
+
+### Fixed
+- **The "Remote Desktop compatibility" toggle now takes effect immediately.**
+  Turning it off hides the recording pill in Remote Desktop sessions right away —
+  previously the toggle only changed rendering at startup, so flipping it appeared
+  to do nothing and the pill always showed. When you're not in a remote session,
+  the toggle never affects the pill. (If you turn it back on and the pill doesn't
+  appear, restart WhisperText.)
+
 ## [1.0.63] — 2026-09-14
 
 ### Fixed

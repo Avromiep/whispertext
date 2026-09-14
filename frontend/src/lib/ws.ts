@@ -10,6 +10,7 @@ export interface WTEvent {
   message?: string;
   kind?: string;
   hands_free?: boolean;
+  rdp_session?: boolean;
   chars?: number;
   seconds?: number;
   model?: string;

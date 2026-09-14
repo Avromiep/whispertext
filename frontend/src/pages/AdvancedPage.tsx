@@ -61,7 +61,7 @@ export default function AdvancedPage() {
 
       <Section title="Remote Desktop">
         <Toggle label="Remote Desktop compatibility"
-          description="Show the recording pill when you use WhisperText over Remote Desktop (RDP). Uses software rendering so the pill stays visible in a remote session. Restart WhisperText to apply."
+          description="Show the recording pill when you use WhisperText over Remote Desktop (RDP). Turn it off to hide the pill in remote sessions. If you turn it back on and the pill doesn't appear, restart WhisperText."
           checked={g.overlay_over_rdp} onChange={(v) => patch({ general: { overlay_over_rdp: v } })} />
       </Section>
 
