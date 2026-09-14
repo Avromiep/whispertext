@@ -3,6 +3,17 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.63] — 2026-09-14
+
+### Fixed
+- **The recording pill now shows over Remote Desktop (RDP).** When you dictate
+  inside a Remote Desktop session, the translucent pill was invisible — that kind
+  of window relies on GPU compositing, which remote sessions don't have. (Dictation
+  still worked; you just got no visual feedback.) WhisperText now composites the
+  pill in software so it stays visible over RDP. There's a new **Remote Desktop
+  compatibility** toggle in Advanced, on by default; turn it off to go back to GPU
+  rendering if you never use RDP (restart to apply).
+
 ## [1.0.62] — 2026-09-10
 
 ### Changed

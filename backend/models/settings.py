@@ -169,6 +169,7 @@ class GeneralSettings(BaseModel):
     debug_mode: bool = False
     onboarding_complete: bool = False
     font_scale: float = 1.0
+    overlay_over_rdp: bool = True   # force the recording pill above a full-screen RDP window
 
 
 class Settings(BaseModel):

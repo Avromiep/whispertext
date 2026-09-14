@@ -59,6 +59,12 @@ export default function AdvancedPage() {
         </div>
       </Section>
 
+      <Section title="Remote Desktop">
+        <Toggle label="Remote Desktop compatibility"
+          description="Show the recording pill when you use WhisperText over Remote Desktop (RDP). Uses software rendering so the pill stays visible in a remote session. Restart WhisperText to apply."
+          checked={g.overlay_over_rdp} onChange={(v) => patch({ general: { overlay_over_rdp: v } })} />
+      </Section>
+
       <Section title="Startup & updates">
         <Toggle label="Launch on boot" description="Start WhisperText when you sign in"
           checked={g.launch_on_boot} onChange={setBoot} />

@@ -16,6 +16,22 @@ const BACKEND_PORT = 43117;
 const DEV = !!process.env.WT_DEV;
 const DEV_URL = "http://localhost:5173";
 
+// Whether to composite in software instead of on the GPU. Our recording pill is a
+// translucent, GPU-composited window, and that kind of window renders as *nothing*
+// inside a Remote Desktop (RDP) session — RDP has no GPU compositing. Software
+// compositing stays visible over RDP. GPU mode can only be chosen before the app
+// is ready, so decide it now, reading straight from settings.json (the backend and
+// preload bridge aren't up yet). Default on; users who never use RDP can turn it
+// off in Advanced (it costs a little GPU-accelerated smoothness locally).
+function rdpCompatEnabled() {
+  try {
+    const dir = process.env.APPDATA || app.getPath("appData");
+    const s = JSON.parse(fs.readFileSync(path.join(dir, "WhisperText", "settings.json"), "utf-8"));
+    return s && s.general && s.general.overlay_over_rdp === false ? false : true;
+  } catch { return true; }   // missing/unreadable (e.g. fresh install) => default on
+}
+if (rdpCompatEnabled()) app.disableHardwareAcceleration();
+
 let settingsWin = null;
 let overlayWin = null;
 let tray = null;
