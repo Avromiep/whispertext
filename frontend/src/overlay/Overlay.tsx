@@ -25,6 +25,7 @@ export default function Overlay() {
   const [elapsed, setElapsed] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
   const [partial, setPartial] = useState("");   // live Deepgram preview text
+  const [detail, setDetail] = useState("");     // why a processing step is slow (fallbacks)
   const [clipN, setClipN] = useState(0);        // bumped when clipboard is inserted
   const [clipShown, setClipShown] = useState(false);
   const level = useRef(0);          // live mic level 0..1 (smoothed in draw loop)
@@ -78,6 +79,9 @@ export default function Overlay() {
     }
     if (e.type !== "status" || !e.state) return;
     clearTimeout(hideTimer.current);
+    // A processing step can carry a reason it's slow (e.g. a cloud engine fell
+    // back to the local model); show it, and clear it on any status without one.
+    setDetail(typeof e.detail === "string" ? e.detail : "");
     switch (e.state) {
       case "listening":
         rdpSessionRef.current = !!e.rdp_session;
@@ -269,6 +273,11 @@ export default function Overlay() {
             className="text-[11px] leading-snug text-muted whitespace-nowrap overflow-hidden px-0.5 border-t border-border/60 pt-1.5"
           >
             {preview}
+          </div>
+        )}
+        {processing && detail && (
+          <div className="text-[11px] leading-snug text-amber-500/90 px-0.5 border-t border-border/60 pt-1.5">
+            {detail}
           </div>
         )}
       </div>

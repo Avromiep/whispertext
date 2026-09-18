@@ -3,6 +3,16 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.66] — 2026-09-18
+
+### Added
+- **The pill now tells you why a dictation is slow.** When the live engine
+  (Deepgram) can't be reached, WhisperText falls back to a cloud backup and then
+  to the on-device model, which is slower. Instead of an unexplained spinner, the
+  recording pill now shows the reason — "Live transcription unavailable — using
+  backup…" and then "Cloud unavailable — transcribing on this PC (slower)…" — so a
+  slow moment is usually a sign the network can't reach the cloud services.
+
 ## [1.0.65] — 2026-09-17
 
 ### Fixed

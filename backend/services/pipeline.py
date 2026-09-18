@@ -332,6 +332,9 @@ class DictationPipeline:
             text = self._finish_deepgram()
             if text:
                 return deepgram_service.result(text, s.language)
+            # Deepgram produced nothing (connection/stream failure) — tell the
+            # overlay why the spinner is now taking longer than usual.
+            bus.status("transcribing", detail="Live transcription unavailable — using backup…")
 
         # Groq batch — also the fallback path for a failed Deepgram stream.
         if s.engine in ("groq", "deepgram"):
@@ -352,6 +355,9 @@ class DictationPipeline:
                 bus.notify("Deepgram unavailable — used another engine.", "warning")
             else:
                 bus.notify("Cloud transcription unavailable — used local instead.", "warning")
+            # Both cloud engines are unreachable; the local model on the CPU is the
+            # slow path, so say so rather than leaving the spinner unexplained.
+            bus.status("transcribing", detail="Cloud unavailable — transcribing on this PC (slower)…")
         return whisper_service.transcribe(audio)
 
     @staticmethod
