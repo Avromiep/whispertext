@@ -93,6 +93,7 @@ class GrokLive:
         self._inserts: list[tuple[int, str]] = []   # (finals-index, clipboard text)
         self._pending_clip: list[str] = []
         self._last_tail = ""
+        self._utt_had_chunk = False          # did a chunk-final arrive in the current utterance?
         self._on_interim = on_interim
         self._ws = None
         self._send_task: asyncio.Task | None = None
@@ -189,21 +190,31 @@ class GrokLive:
         self._emit_interim("")
 
     def _handle_message(self, data: dict) -> None:
-        """Route one xAI event. transcript.partial carries is_final; transcript.done
-        is the authoritative final and closes the stream."""
+        """Route one xAI event. transcript.partial (is_final) segments drive the
+        live preview; transcript.done carries the authoritative full transcript
+        used for the typed result."""
         etype = data.get("type")
         text = (data.get("text") or "").strip()
+        if etype == "transcript.done" or (etype == "transcript.partial" and data.get("is_final")):
+            # Privacy-safe structural trace (no dictated text — length only) for
+            # diagnosing xAI event-flow changes; visible only in debug mode.
+            log.debug("Grok event type=%s is_final=%s speech_final=%s len=%d",
+                      etype, data.get("is_final"), data.get("speech_final"), len(text))
         if etype == "transcript.partial":
             if data.get("is_final"):
-                self._commit_final(text)          # a finalized segment
+                if data.get("speech_final"):
+                    # Utterance-final REPEATS the whole utterance (= all its
+                    # chunk-finals concatenated). Only commit it if no chunk-final
+                    # arrived for this utterance; otherwise it doubles the text.
+                    if text and not self._utt_had_chunk:
+                        self._commit_final(text)
+                    self._utt_had_chunk = False    # next utterance starts fresh
+                else:
+                    self._commit_final(text)       # incremental chunk-final
+                    self._utt_had_chunk = True
             elif text:
-                self._emit_interim(text)          # live, not-yet-final tail
-        elif etype == "transcript.done":
-            # Belt-and-suspenders: if no per-segment finals arrived, use the full
-            # text here so the transcript is never empty. (If segments did arrive,
-            # they already hold it — don't double-add.)
-            if text and not self._finals:
-                self._commit_final(text)
+                self._emit_interim(text)           # live, not-yet-final tail
+        # transcript.done is an empty end-of-stream marker (len 0) — nothing to do.
 
     def _emit_interim(self, tail: str) -> None:
         """Push the running transcript (finals + inserts + live tail) to the display

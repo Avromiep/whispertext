@@ -3,6 +3,17 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.69] — 2026-09-18
+
+### Fixed
+- **Grok (xAI) no longer types everything twice.** xAI's live stream sends each
+  utterance twice — as incremental pieces, then as a full repeat — plus an empty
+  end marker, and WhisperText was banking both copies, so every word came out
+  doubled. It now keeps the incremental text and drops the repeat. Grok only —
+  Deepgram, Groq, and Local were never affected.
+- The Grok spend meter now shows **"< $0.01"** instead of "$0.00" while your usage
+  is real but under a cent.
+
 ## [1.0.68] — 2026-09-18
 
 ### Added

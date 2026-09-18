@@ -143,7 +143,9 @@ function GrokUsage() {
             </div>
           ) : u ? (
             <>
-              <div className="text-lg font-semibold mt-0.5">~${u.estimated_usd.toFixed(2)}</div>
+              <div className="text-lg font-semibold mt-0.5">
+                {u.estimated_usd >= 0.01 ? `~$${u.estimated_usd.toFixed(2)}` : (u.minutes > 0 ? "< $0.01" : "$0.00")}
+              </div>
               <div className="text-[11px] text-muted mt-0.5">
                 {u.minutes.toFixed(1)} min of audio · ${u.rate_per_hour.toFixed(2)}/hr · estimate, see console.x.ai for the exact bill
               </div>
