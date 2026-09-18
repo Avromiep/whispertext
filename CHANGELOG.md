@@ -3,6 +3,13 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.68] — 2026-09-18
+
+### Added
+- **One-click links to get each engine's API key.** The Deepgram, Grok (xAI), and
+  Groq key sections each now have a button that opens the provider's sign-up/API-key
+  page in your browser, with short step-by-step instructions right below it.
+
 ## [1.0.67] — 2026-09-18
 
 ### Added

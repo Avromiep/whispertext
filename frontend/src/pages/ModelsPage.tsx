@@ -1,7 +1,7 @@
 /** Whisper model management: transcription engine choice, local model status, downloads. */
 import { useCallback, useEffect, useState } from "react";
-import { Check, Cloud, Download, HardDrive, Loader2, Radio, RefreshCw, Trash2, X, Zap } from "lucide-react";
-import { api, SystemInfo, WhisperModelInfo } from "../lib/api";
+import { Check, Cloud, Download, ExternalLink, HardDrive, Loader2, Radio, RefreshCw, Trash2, X, Zap } from "lucide-react";
+import { api, bridge, SystemInfo, WhisperModelInfo } from "../lib/api";
 import { useBackendEvents } from "../lib/ws";
 import { useSettings } from "../hooks/useSettings";
 import { Badge, Button, Card, PageHeader, SecretInput, Section, cn } from "../components/ui";
@@ -54,6 +54,23 @@ function GroqKeyRow({ label, placeholder, providerId, validate, onConfiguredChan
           ? <span className="text-xs text-emerald-400 flex items-center gap-1"><Check size={13} /> Connected{result.latency_ms ? ` · ${result.latency_ms} ms` : ""}</span>
           : <span className="text-xs text-red-400 flex items-center gap-1"><X size={13} /> {result.message}</span>)}
       </div>
+    </div>
+  );
+}
+
+/** "Get an API key" helper: a button that opens the provider's console in the
+ * default browser, plus numbered steps for setting the key up. */
+function KeySetupHelp({ url, buttonLabel, steps }: { url: string; buttonLabel: string; steps: string[] }) {
+  const open = () => { if (bridge) bridge.openExternal(url); else window.open(url, "_blank"); };
+  return (
+    <div className="rounded-xl border border-border bg-black/5 p-3 space-y-2">
+      <button onClick={open}
+        className="text-xs text-accent hover:underline inline-flex items-center gap-1 font-medium">
+        <ExternalLink size={12} /> {buttonLabel}
+      </button>
+      <ol className="text-[11px] text-muted list-decimal ml-4 space-y-0.5">
+        {steps.map((s, i) => <li key={i}>{s}</li>)}
+      </ol>
     </div>
   );
 }
@@ -219,7 +236,15 @@ export default function ModelsPage() {
 
         {engine === "deepgram" && (
           <div className="space-y-4 pt-3 border-t border-border">
-            <GroqKeyRow label="Deepgram API key" placeholder="Get a free key ($200 credit) at console.deepgram.com"
+            <KeySetupHelp url="https://console.deepgram.com/signup"
+              buttonLabel="Get a Deepgram API key → console.deepgram.com"
+              steps={[
+                "Sign up — it's free and includes $200 of credit (no card required).",
+                "In the console, open API Keys and click Create a New API Key.",
+                "Copy the key, paste it below, and click Save key.",
+                "For the credit meter to show, create the key with Owner or Admin permission.",
+              ]} />
+            <GroqKeyRow label="Deepgram API key" placeholder="Paste your Deepgram API key"
               providerId="deepgram" validate={api.validateDeepgram} onConfiguredChange={setDeepgramConfigured} />
             {deepgramConfigured && <DeepgramBalance />}
             <p className="text-[11px] text-muted">
@@ -232,7 +257,15 @@ export default function ModelsPage() {
 
         {engine === "grok" && (
           <div className="space-y-4 pt-3 border-t border-border">
-            <GroqKeyRow label="xAI API key" placeholder="Create an API key at console.x.ai (separate from a SuperGrok subscription)"
+            <KeySetupHelp url="https://console.x.ai/"
+              buttonLabel="Get an xAI API key → console.x.ai"
+              steps={[
+                "Sign in to the xAI developer console (this is separate from a SuperGrok/X subscription).",
+                "Open Billing and add a payment method or prepaid credits — API usage is billed separately.",
+                "Open API Keys and click Create API Key.",
+                "Copy the key, paste it below, and click Save key.",
+              ]} />
+            <GroqKeyRow label="xAI API key" placeholder="Paste your xAI API key"
               providerId="grok" validate={api.validateGrok} onConfiguredChange={setGrokConfigured} />
             {grokConfigured && <GrokUsage />}
             <p className="text-[11px] text-muted">
@@ -246,7 +279,14 @@ export default function ModelsPage() {
 
         {engine === "groq" && (
           <div className="space-y-4 pt-3 border-t border-border">
-            <GroqKeyRow label="Groq API key" placeholder="Get a free key at console.groq.com"
+            <KeySetupHelp url="https://console.groq.com/keys"
+              buttonLabel="Get a Groq API key → console.groq.com"
+              steps={[
+                "Sign up at console.groq.com — the free tier is enough for dictation.",
+                "On the API Keys page, click Create API Key.",
+                "Copy the key, paste it below, and click Save key.",
+              ]} />
+            <GroqKeyRow label="Groq API key" placeholder="Paste your Groq API key"
               providerId="groq" validate={api.validateGroq} onConfiguredChange={setGroqConfigured} />
 
             {!showBackup ? (
