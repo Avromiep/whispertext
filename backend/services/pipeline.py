@@ -13,7 +13,7 @@ import time
 import pyperclip
 
 from backend.models.settings import load_settings
-from backend.services import deepgram_service
+from backend.services import deepgram_service, grok_service
 from backend.services.audio_service import audio_service, speech_seconds
 from backend.services.event_bus import bus
 from backend.services.groq_whisper_service import (BACKUP_PROVIDER_ID, PROVIDER_ID,
@@ -26,6 +26,7 @@ from backend.services.whisper_service import whisper_service
 from backend.storage.database import HistoryStore
 from backend.utils import encryption
 from backend.utils.logger import get_logger
+from backend.utils import usage
 from backend.utils.text import (apply_vocabulary_casing, build_vocabulary_prompt,
                                  fix_numeral_idioms, fix_ordinal_idioms,
                                  remove_filler_words, spoken_fractions_to_words,
@@ -50,7 +51,7 @@ class DictationPipeline:
         # stops after transcription and reports the raw text over the
         # WebSocket instead of running cleanup/typing/history.
         self._test_mode = False
-        self._dg_session = None                # active Deepgram live session, if any
+        self._live_session = None              # active live-streaming session (Deepgram/Grok), if any
         self._last_partial = ""                # last live-preview text sent to overlay
         self._clip_inserts: list[str] = []     # clipboard inserts (batch-engine fallback)
         # Persistent loop: keeps provider HTTP connection pools warm between
@@ -95,14 +96,14 @@ class DictationPipeline:
         if not text:
             bus.notify("Clipboard is empty — nothing to insert.", "info")
             return
-        session = self._dg_session
+        session = self._live_session
         if session is not None:
             session.insert_clipboard(text)
             # Flush the words spoken so far so the clip lands at the press point.
             try:
                 asyncio.run_coroutine_threadsafe(session.finalize(), self._loop)
             except Exception as exc:
-                log.debug("Deepgram finalize failed: %s", exc)
+                log.debug("Live finalize failed: %s", exc)
         else:
             self._clip_inserts.append(text)
         bus.publish("clip_inserted", {"chars": len(text)})
@@ -139,25 +140,31 @@ class DictationPipeline:
         # toggle live: over RDP the pill shows only when the setting is on.
         bus.status("listening", hands_free=hands_free, rdp_session=is_remote_session())
         cfg = load_settings()
-        if cfg.whisper.engine == "deepgram":
-            self._start_deepgram(cfg)
+        if cfg.whisper.engine in ("deepgram", "grok"):
+            self._start_live(cfg)
         if hands_free and cfg.hotkeys.hands_free_auto_stop:
             threading.Thread(target=self._hands_free_endpoint, daemon=True,
                              name="hands-free-endpoint").start()
 
-    def _start_deepgram(self, cfg) -> None:
-        """Open a live Deepgram stream and feed the mic to it as we record, so
-        the transcript is nearly ready by the time the key is released."""
+    def _start_live(self, cfg) -> None:
+        """Open a live streaming session (Deepgram or Grok) and feed the mic to it
+        as we record, so the transcript is nearly ready by the time the key is
+        released. Both services expose the same session interface."""
         # getattr: a mic that hasn't reported its native rate yet (or a test
         # double) falls back to the configured sample rate rather than crashing.
         rate = getattr(audio_service, "_capture_rate", None) or cfg.audio.sample_rate
-        session = deepgram_service.make_live(
-            cfg.whisper.deepgram_model, rate, cfg.whisper.language, cfg.vocabulary.words,
-            numerals=cfg.formatting.numbers_as_digits,
-            on_interim=self._publish_partial)
+        if cfg.whisper.engine == "grok":
+            session = grok_service.make_live(
+                cfg.whisper.grok_model, rate, cfg.whisper.language, cfg.vocabulary.words,
+                on_interim=self._publish_partial)
+        else:
+            session = deepgram_service.make_live(
+                cfg.whisper.deepgram_model, rate, cfg.whisper.language, cfg.vocabulary.words,
+                numerals=cfg.formatting.numbers_as_digits,
+                on_interim=self._publish_partial)
         if session is None:
-            return  # no Deepgram key — transcription will fall back to Groq/local
-        self._dg_session = session
+            return  # no key — transcription will fall back to Groq/local
+        self._live_session = session
         audio_service.set_chunk_sink(session.feed)
         asyncio.run_coroutine_threadsafe(session.start(), self._loop)  # connect in background
 
@@ -170,11 +177,11 @@ class DictationPipeline:
         self._last_partial = text
         bus.publish("partial", {"text": text})
 
-    def _finish_deepgram(self) -> str | None:
+    def _finish_live(self) -> str | None:
         """Finalize the live session and return its transcript (None => fall
         back to batch). Detaches the sink and clears the session either way."""
-        session = self._dg_session
-        self._dg_session = None
+        session = self._live_session
+        self._live_session = None
         self._last_partial = ""
         if session is None:
             return None
@@ -183,12 +190,12 @@ class DictationPipeline:
             text = asyncio.run_coroutine_threadsafe(session.finish(), self._loop).result(12.0)
             return text or None       # empty => fall back (silence or a stream hiccup)
         except Exception as exc:
-            log.warning("Deepgram streaming failed (%s); falling back to batch", exc)
+            log.warning("Live streaming failed (%s); falling back to batch", exc)
             return None
 
-    def _discard_deepgram(self) -> None:
-        session = self._dg_session
-        self._dg_session = None
+    def _discard_live(self) -> None:
+        session = self._live_session
+        self._live_session = None
         self._last_partial = ""
         if session is None:
             return
@@ -248,7 +255,7 @@ class DictationPipeline:
                 "cut off. Try again, and check no other app (e.g. VoiceAttack) is using the mic.",
                 "warning")
         if audio.size == 0:  # nothing captured, or the buffer held only silence
-            self._discard_deepgram()
+            self._discard_live()
             self._report_no_speech()
             return
         # Process on a worker thread so the hook thread returns instantly.
@@ -256,10 +263,10 @@ class DictationPipeline:
 
     def _process(self, audio) -> None:
         if not self._busy.acquire(blocking=False):
-            # This dictation is dropped (one at a time) — but a live Deepgram
+            # This dictation is dropped (one at a time) — but a live streaming
             # session was already opened for it, so close it or the WebSocket
             # would be left dangling.
-            self._discard_deepgram()
+            self._discard_live()
             bus.notify("Still processing the previous dictation…", "warning")
             return
         t0 = time.monotonic()
@@ -322,22 +329,24 @@ class DictationPipeline:
     def _transcribe(self, audio):
         """Resolve the transcript for the configured engine, with a robust
         fallback chain so a dictation is never lost:
-        Deepgram (live) -> Groq (batch) -> local Whisper."""
+        Deepgram/Grok (live) -> Groq (batch) -> local Whisper."""
         cfg = load_settings()
         s = cfg.whisper
 
-        # Deepgram: the transcript was streamed while the user talked; finishing
-        # just flushes the tail. Empty/failure falls through to batch below.
-        if s.engine == "deepgram":
-            text = self._finish_deepgram()
+        # Live engines (Deepgram, Grok): the transcript was streamed while the
+        # user talked; finishing just flushes the tail. Empty/failure falls
+        # through to batch below. result() is identical across engines.
+        if s.engine in ("deepgram", "grok"):
+            text = self._finish_live()
             if text:
+                usage.record(s.engine, len(audio) / 16000)   # ~held seconds, for the spend estimate
                 return deepgram_service.result(text, s.language)
-            # Deepgram produced nothing (connection/stream failure) — tell the
-            # overlay why the spinner is now taking longer than usual.
+            # The live engine produced nothing (connection/stream failure) — tell
+            # the overlay why the spinner is now taking longer than usual.
             bus.status("transcribing", detail="Live transcription unavailable — using backup…")
 
-        # Groq batch — also the fallback path for a failed Deepgram stream.
-        if s.engine in ("groq", "deepgram"):
+        # Groq batch — also the fallback path for a failed live stream.
+        if s.engine in ("groq", "deepgram", "grok"):
             prompt = build_vocabulary_prompt(cfg.vocabulary.words)
             for provider_id in (PROVIDER_ID, BACKUP_PROVIDER_ID):
                 key = encryption.get_api_key(provider_id)
@@ -351,8 +360,8 @@ class DictationPipeline:
                 except Exception as exc:
                     log.warning("Groq transcription failed via %s (%s); trying next",
                                provider_id, exc)
-            if s.engine == "deepgram":
-                bus.notify("Deepgram unavailable — used another engine.", "warning")
+            if s.engine in ("deepgram", "grok"):
+                bus.notify("Live engine unavailable — used another engine.", "warning")
             else:
                 bus.notify("Cloud transcription unavailable — used local instead.", "warning")
             # Both cloud engines are unreachable; the local model on the CPU is the

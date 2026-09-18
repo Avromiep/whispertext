@@ -262,6 +262,19 @@ async def deepgram_balance() -> dict:
     return await deepgram_service.balance()
 
 
+@router.post("/transcription/grok/validate")
+async def validate_grok() -> dict:
+    from backend.services import grok_service
+    return await grok_service.validate()
+
+
+@router.get("/transcription/grok/usage")
+async def grok_usage() -> dict:
+    """Estimated Grok spend this calendar month (local estimate, no extra key)."""
+    from backend.utils import usage
+    return usage.summary("grok")
+
+
 # ----------------------------------------------------------------- whisper mdls
 @router.get("/models")
 async def list_models() -> list[dict]:

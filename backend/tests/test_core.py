@@ -1410,6 +1410,65 @@ class TestClipboardInsert:
         assert dl._assemble() == "One."
 
 
+class TestGrokLive:
+    """xAI's streaming events (transcript.partial/done) build the transcript and
+    drive the same live-preview + clipboard-splice logic as Deepgram."""
+
+    def _live(self):
+        from backend.services.grok_service import GrokLive
+        seen: list[str] = []
+        gl = GrokLive.__new__(GrokLive)
+        gl._finals = []
+        gl._inserts = []
+        gl._pending_clip = []
+        gl._last_tail = ""
+        gl._on_interim = seen.append
+        return gl, seen
+
+    def _partial(self, text, is_final):
+        return {"type": "transcript.partial", "text": text, "is_final": is_final}
+
+    def test_interim_updates_preview_but_not_finals(self):
+        gl, seen = self._live()
+        gl._handle_message(self._partial("hello", False))
+        gl._handle_message(self._partial("hello world", False))
+        assert seen == ["hello", "hello world"]
+        assert gl._finals == []
+
+    def test_final_commits_and_accumulates(self):
+        gl, seen = self._live()
+        gl._handle_message(self._partial("hello world", True))
+        gl._handle_message(self._partial("second part", True))
+        assert gl._finals == ["hello world", "second part"]
+        assert seen[-1] == "hello world second part"
+
+    def test_done_supplies_text_when_no_segments(self):
+        """If only interims arrived, transcript.done's full text is used."""
+        gl, _ = self._live()
+        gl._handle_message(self._partial("live tail", False))
+        gl._handle_message({"type": "transcript.done", "text": "the whole thing"})
+        assert gl._assemble() == "the whole thing"
+
+    def test_done_does_not_double_add_when_segments_exist(self):
+        gl, _ = self._live()
+        gl._handle_message(self._partial("hello world", True))
+        gl._handle_message({"type": "transcript.done", "text": "hello world"})
+        assert gl._assemble() == "hello world"      # not "hello world hello world"
+
+    def test_non_transcript_events_ignored(self):
+        gl, seen = self._live()
+        gl._handle_message({"type": "transcript.created"})
+        gl._handle_message(self._partial("", False))
+        assert seen == [] and gl._finals == []
+
+    def test_clipboard_insert_lands_after_flushed_words(self):
+        gl, _ = self._live()
+        gl.insert_clipboard("123 Main St")
+        gl._handle_message(self._partial("The meeting is at", True))
+        gl._handle_message(self._partial("on Tuesday.", True))
+        assert gl._assemble() == "The meeting is at 123 Main St on Tuesday."
+
+
 class TestTimeFormat:
     """Spoken clock times keep the natural hour ("7:40"), not Deepgram's zero-
     padded "07:40" — but minutes/seconds and two-digit hours are untouched."""

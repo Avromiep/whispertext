@@ -102,6 +102,47 @@ function DeepgramBalance() {
   );
 }
 
+/** Estimated Grok spend this month. xAI's exact bill lives in its console and
+ * needs a separate management key; this is a no-extra-key estimate from how much
+ * audio you've transcribed via Grok times the streaming rate. */
+function GrokUsage() {
+  const [loading, setLoading] = useState(true);
+  const [u, setU] = useState<{ minutes: number; rate_per_hour: number; estimated_usd: number } | null>(null);
+
+  const refresh = useCallback(() => {
+    setLoading(true);
+    api.grokUsage().then(setU).catch(() => setU(null)).finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
+
+  return (
+    <div className="rounded-xl border border-border bg-black/5 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-xs text-muted">Estimated spend this month</div>
+          {loading ? (
+            <div className="text-sm font-medium flex items-center gap-1.5 mt-0.5">
+              <Loader2 size={14} className="animate-spin" /> Checking…
+            </div>
+          ) : u ? (
+            <>
+              <div className="text-lg font-semibold mt-0.5">~${u.estimated_usd.toFixed(2)}</div>
+              <div className="text-[11px] text-muted mt-0.5">
+                {u.minutes.toFixed(1)} min of audio · ${u.rate_per_hour.toFixed(2)}/hr · estimate, see console.x.ai for the exact bill
+              </div>
+            </>
+          ) : (
+            <div className="text-xs text-amber-500 mt-0.5">Usage unavailable</div>
+          )}
+        </div>
+        <Button size="sm" onClick={refresh} disabled={loading}>
+          {loading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Refresh
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function ModelsPage() {
   const { settings, patch } = useSettings();
   const [models, setModels] = useState<WhisperModelInfo[]>([]);
@@ -110,6 +151,7 @@ export default function ModelsPage() {
   const [showBackup, setShowBackup] = useState(false);
   const [groqConfigured, setGroqConfigured] = useState(false);
   const [deepgramConfigured, setDeepgramConfigured] = useState(false);
+  const [grokConfigured, setGrokConfigured] = useState(false);
 
   const load = useCallback(() => { api.models().then(setModels).catch(() => {}); }, []);
   useEffect(() => {
@@ -118,6 +160,7 @@ export default function ModelsPage() {
     api.hasApiKey("groq_backup").then((r) => setShowBackup(r.configured)).catch(() => {});
     api.hasApiKey("groq").then((r) => setGroqConfigured(r.configured)).catch(() => {});
     api.hasApiKey("deepgram").then((r) => setDeepgramConfigured(r.configured)).catch(() => {});
+    api.hasApiKey("grok").then((r) => setGrokConfigured(r.configured)).catch(() => {});
   }, [load]);
 
   useBackendEvents((e) => {
@@ -146,8 +189,8 @@ export default function ModelsPage() {
           </Badge>
         } />
 
-      <Section title="Transcription engine" description="Local never leaves your machine. Groq is a fast batch cloud engine. Deepgram streams live — it transcribes while you talk, so there's no wait after you release the hotkey.">
-        <div className="grid grid-cols-3 gap-2 mb-4">
+      <Section title="Transcription engine" description="Local never leaves your machine. Groq is a fast batch cloud engine. Deepgram and Grok (xAI) both stream live — they transcribe while you talk, so there's no wait after you release the hotkey.">
+        <div className="grid grid-cols-2 gap-2 mb-4">
           <button onClick={() => patch({ whisper: { engine: "local" } })}
             className={cn("rounded-xl border p-3 text-left transition-all",
               engine === "local" ? "border-accent bg-accent/10" : "border-border hover:border-accent/40")}>
@@ -157,7 +200,7 @@ export default function ModelsPage() {
           <button onClick={() => patch({ whisper: { engine: "groq" } })}
             className={cn("rounded-xl border p-3 text-left transition-all",
               engine === "groq" ? "border-accent bg-accent/10" : "border-border hover:border-accent/40")}>
-            <div className="text-sm font-medium flex items-center gap-1.5"><Cloud size={13} /> Groq</div>
+            <div className="text-sm font-medium flex items-center gap-1.5"><Cloud size={13} /> Groq · Whisper</div>
             <div className="text-[11px] text-muted mt-0.5">{groqConfigured ? "Key configured ✓" : "Fast batch · needs key"}</div>
           </button>
           <button onClick={() => patch({ whisper: { engine: "deepgram" } })}
@@ -165,6 +208,12 @@ export default function ModelsPage() {
               engine === "deepgram" ? "border-accent bg-accent/10" : "border-border hover:border-accent/40")}>
             <div className="text-sm font-medium flex items-center gap-1.5"><Radio size={13} /> Deepgram</div>
             <div className="text-[11px] text-muted mt-0.5">{deepgramConfigured ? "Key configured ✓" : "Live · feels instant"}</div>
+          </button>
+          <button onClick={() => patch({ whisper: { engine: "grok" } })}
+            className={cn("rounded-xl border p-3 text-left transition-all",
+              engine === "grok" ? "border-accent bg-accent/10" : "border-border hover:border-accent/40")}>
+            <div className="text-sm font-medium flex items-center gap-1.5"><Zap size={13} /> Grok · xAI</div>
+            <div className="text-[11px] text-muted mt-0.5">{grokConfigured ? "Key configured ✓" : "Live · cheaper stream"}</div>
           </button>
         </div>
 
@@ -177,6 +226,20 @@ export default function ModelsPage() {
               Deepgram transcribes as you speak, so releasing the hotkey feels instant. If it's ever
               unavailable, WhisperText falls back to Groq (if configured), then local Whisper — you never
               lose a transcription. Groq's key is kept and used whenever you switch back.
+            </p>
+          </div>
+        )}
+
+        {engine === "grok" && (
+          <div className="space-y-4 pt-3 border-t border-border">
+            <GroqKeyRow label="xAI API key" placeholder="Create an API key at console.x.ai (separate from a SuperGrok subscription)"
+              providerId="grok" validate={api.validateGrok} onConfiguredChange={setGrokConfigured} />
+            {grokConfigured && <GrokUsage />}
+            <p className="text-[11px] text-muted">
+              Grok Voice Transcribe (xAI) streams live like Deepgram, at a lower price ($0.20/hr). It needs an
+              xAI <b>API</b> key from console.x.ai with its own billing — a SuperGrok/X subscription does not
+              include API access. If it's ever unavailable, WhisperText falls back to Groq (if configured),
+              then local Whisper. Not to be confused with the “Groq · Whisper” engine above.
             </p>
           </div>
         )}

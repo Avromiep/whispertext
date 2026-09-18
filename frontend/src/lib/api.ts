@@ -42,7 +42,7 @@ export interface Settings {
   general: { theme: "dark" | "light" | "system"; launch_on_boot: boolean; notifications: boolean; telemetry: boolean; auto_update: boolean; debug_mode: boolean; onboarding_complete: boolean; font_scale: number; overlay_over_rdp: boolean };
   hotkeys: { push_to_talk: string; toggle_key: string; double_tap_window_ms: number; open_settings: string; clipboard_insert_key: string; hands_free_enabled: boolean; hands_free_auto_stop: boolean; hands_free_silence_ms: number };
   audio: { input_device: number | null; sample_rate: number; noise_suppression: boolean; auto_gain: boolean; silence_trimming: boolean; vad_enabled: boolean; keep_mic_warm: boolean };
-  whisper: { model: string; language: string; compute_device: string; beam_size: number; engine: "local" | "groq" | "deepgram"; groq_model: string; deepgram_model: string };
+  whisper: { model: string; language: string; compute_device: string; beam_size: number; engine: "local" | "groq" | "deepgram" | "grok"; groq_model: string; deepgram_model: string; grok_model: string };
   ai: { enabled: boolean; mode: "cloud" | "local" | "hybrid"; provider: string; fallback_order: string[]; preset: string; custom_instructions: string; performance: "quality" | "balanced" | "speed"; minimize_costs: boolean; offline_only: boolean; streaming: boolean; retries: number; providers: Record<string, ProviderConfig> };
   typing: { method: string; chars_per_second: number; instant_paste_threshold: number; pre_type_delay_ms: number; restore_clipboard: boolean };
   formatting: { auto_capitalize: boolean; auto_punctuate: boolean; remove_fillers: boolean; smart_paragraphs: boolean; spoken_punctuation: boolean; spoken_lists: boolean; numbers_as_digits: boolean; per_tab_rules: PerTabRule[] };
@@ -87,6 +87,8 @@ export const api = {
   validateGroqBackup: () => request<{ connected: boolean; message: string; latency_ms?: number }>("/transcription/groq/validate-backup", { method: "POST" }),
   validateDeepgram: () => request<{ connected: boolean; message: string; latency_ms?: number }>("/transcription/deepgram/validate", { method: "POST" }),
   deepgramBalance: () => request<{ ok: boolean; amount?: number; units?: string; message?: string; needs_admin?: boolean }>("/transcription/deepgram/balance"),
+  validateGrok: () => request<{ connected: boolean; message: string; latency_ms?: number }>("/transcription/grok/validate", { method: "POST" }),
+  grokUsage: () => request<{ engine: string; month: string; seconds: number; minutes: number; rate_per_hour: number; estimated_usd: number }>("/transcription/grok/usage"),
   checkUpdates: () => request<{ current: string; latest: string; update_available: boolean; url: string }>("/updates/check", { method: "POST" }),
   tailLogs: (lines = 400) => request<{ text: string; shown: number; total: number }>(`/logs/tail?lines=${lines}`),
 };

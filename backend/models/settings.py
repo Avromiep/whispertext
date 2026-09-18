@@ -64,11 +64,14 @@ class WhisperSettings(BaseModel):
     # "local" = faster-whisper on this machine's CPU/GPU. "groq" = Groq's
     # hosted Whisper (batch, ~200-300x real-time). "deepgram" = Deepgram's live
     # streaming (transcribes as you talk, so there's no post-release wait).
-    # Any cloud engine falls back automatically (Deepgram -> Groq -> local) if a
+    # "grok" = xAI's Grok Voice Transcribe live streaming (like Deepgram; NOTE:
+    # this is xAI's Grok, distinct from the "groq" batch engine above).
+    # A live engine falls back automatically (Deepgram/Grok -> Groq -> local) if a
     # call fails, so a dictation is never lost.
-    engine: Literal["local", "groq", "deepgram"] = "local"
+    engine: Literal["local", "groq", "deepgram", "grok"] = "local"
     groq_model: str = "whisper-large-v3-turbo"
     deepgram_model: str = "nova-3"
+    grok_model: str = "grok-voice-transcribe-2.0"
 
 
 class ProviderConfig(BaseModel):

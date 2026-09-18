@@ -3,6 +3,18 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.67] — 2026-09-18
+
+### Added
+- **New transcription engine: Grok Voice Transcribe (xAI).** A 4th engine
+  alongside Local, Groq, and Deepgram, in Models → Transcription engine. Like
+  Deepgram it streams live (no wait on release), at a lower price ($0.20/hr). Pick
+  it and add an **xAI API key** from console.x.ai — note this needs its own API
+  billing and is **not** included in a SuperGrok/X subscription. Shows an
+  estimated-spend-this-month meter, and falls back to Groq/local if unavailable,
+  like the other cloud engines. (Distinct from the existing "Groq · Whisper" batch
+  engine — same-sounding name, different service.)
+
 ## [1.0.66] — 2026-09-18
 
 ### Added
