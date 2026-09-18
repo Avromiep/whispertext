@@ -3,6 +3,16 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.65] — 2026-09-17
+
+### Fixed
+- **Spoken fractions stay as words.** Saying "a quarter", "a half", "a third",
+  "two thirds", or "three quarters" was being turned into decimals (0.25, 0.5,
+  0.333, …) by the speech formatter. They now come back out as words. Whole
+  numbers still become digits (e.g. "twenty five" → 25). Note: because the
+  formatter gives the same text either way, a decimal you dictate literally as
+  "zero point five" will also come out as "a half".
+
 ## [1.0.64] — 2026-09-14
 
 ### Fixed

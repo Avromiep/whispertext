@@ -584,6 +584,25 @@ class TestNumeralIdioms:
         from backend.utils.text import fix_ordinal_idioms
         assert fix_ordinal_idioms(text) == expected
 
+    @pytest.mark.parametrize("text,expected", [
+        # spoken fractions smart_format turned into decimals -> back to words
+        ("I need 0.25 of the pie", "I need a quarter of the pie"),
+        ("about 0.333 of them", "about a third of them"),
+        ("roughly 0.667 done", "roughly two thirds done"),
+        ("split it 0.5 and 0.5", "split it a half and a half"),
+        ("we're 0.75 of the way", "we're three quarters of the way"),
+        # sentence-initial keeps the capital
+        ("0.25 of the team left.", "A quarter of the team left."),
+        # NOT a standalone fraction: part of a longer number / currency / percent
+        ("the file is 10.25 MB", "the file is 10.25 MB"),
+        ("value 0.256 here", "value 0.256 here"),
+        ("it costs $0.25 today", "it costs $0.25 today"),
+        ("error rate 0.25% overall", "error rate 0.25% overall"),
+    ])
+    def test_fractions(self, text, expected):
+        from backend.utils.text import spoken_fractions_to_words
+        assert spoken_fractions_to_words(text) == expected
+
 
 # ---------------------------------------------------- per-window sentence layout
 class TestSentenceLayout:

@@ -133,6 +133,25 @@ def fix_ordinal_idioms(text: str) -> str:
     return _ORDINAL.sub(repl, text)
 
 
+# Deepgram's smart_format turns spoken fraction words into decimals
+# ("a quarter" -> 0.25, "a third" -> 0.333). Turn the common ones back into
+# words. A literally-dictated decimal produces the same text, so this can't tell
+# the two apart — reverting to words is the chosen trade-off (fractions win).
+_FRACTION_WORDS = {
+    "0.5": "a half", "0.25": "a quarter", "0.75": "three quarters",
+    "0.333": "a third", "0.667": "two thirds", "0.666": "two thirds",
+}
+# Only a standalone decimal token: not inside a longer number ("10.25", "0.256")
+# and not attached to a currency symbol or percent sign.
+_FRACTION = re.compile(r"(?<![\d.$£€])0\.(?:5|25|75|333|667|666)(?![\d%])")
+
+
+def spoken_fractions_to_words(text: str) -> str:
+    """Rewrite the common fraction decimals back to words. No-op when there are
+    none (e.g. a word-based engine, or text with no such value)."""
+    return _FRACTION.sub(lambda m: _cap(_FRACTION_WORDS[m.group(0)], text, m.start()), text)
+
+
 def sentences_on_separate_lines(text: str, blank_line: bool = True) -> str:
     """Put each sentence on its own line. With `blank_line` (default) an empty
     line separates each; otherwise the sentences sit on consecutive lines."""

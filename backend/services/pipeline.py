@@ -28,7 +28,8 @@ from backend.utils import encryption
 from backend.utils.logger import get_logger
 from backend.utils.text import (apply_vocabulary_casing, build_vocabulary_prompt,
                                  fix_numeral_idioms, fix_ordinal_idioms,
-                                 remove_filler_words, strip_time_leading_zero,
+                                 remove_filler_words, spoken_fractions_to_words,
+                                 strip_time_leading_zero,
                                  is_silence_hallucination, sentences_on_separate_lines)
 
 log = get_logger(__name__)
@@ -394,6 +395,9 @@ class DictationPipeline:
         # Ordinals read better as words in prose ("first"), but stay digits in
         # dates ("January 1st"). Independent of numbers_as_digits.
         text = fix_ordinal_idioms(text)
+        # smart_format (always on) turns "a quarter"/"a third" into 0.25/0.333 —
+        # spell the common fractions back out. Independent of numbers_as_digits.
+        text = spoken_fractions_to_words(text)
         # Times come out naturally: "07:40" -> "7:40" (drop the zero-padded hour).
         text = strip_time_leading_zero(text)
         if text and f.auto_capitalize:
