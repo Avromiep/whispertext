@@ -3,6 +3,15 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.71] — 2026-09-20
+
+### Added
+- **"Isolate my voice" (experimental, Grok only).** A new toggle in the Grok engine
+  settings uses speaker detection to keep only the dominant speaker — you — and drop
+  background voices from what gets typed. It's best‑effort (it can occasionally
+  mislabel or clip a quiet moment), so it's off by default. Note: you can't truly
+  "train" an engine on your voice; this is the closest practical approach.
+
 ## [1.0.70] — 2026-09-20
 
 ### Added

@@ -72,6 +72,9 @@ class WhisperSettings(BaseModel):
     groq_model: str = "whisper-large-v3-turbo"
     deepgram_model: str = "nova-3"
     grok_model: str = "grok-voice-transcribe-2.0"
+    # Experimental (Grok only): use speaker diarization to keep only the dominant
+    # speaker's words, dropping background voices. Best-effort — can mislabel.
+    grok_isolate_speaker: bool = False
 
 
 class ProviderConfig(BaseModel):

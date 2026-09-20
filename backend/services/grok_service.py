@@ -20,7 +20,9 @@ from __future__ import annotations
 import asyncio
 import json
 import queue
+import re
 import time
+from collections import Counter
 from typing import Callable
 from urllib.parse import urlencode
 
@@ -65,17 +67,26 @@ async def validate(provider_id: str = PROVIDER_ID) -> dict:
         return {"connected": False, "message": str(exc)}
 
 
-def _ws_url(model: str, sample_rate: int, language: str, keyterms: list[str]) -> str:
+def _ws_url(model: str, sample_rate: int, language: str, keyterms: list[str],
+            diarize: bool = False) -> str:
     params = [("model", model), ("encoding", "pcm"), ("sample_rate", str(sample_rate)),
               # Interim hypotheses stream in for the overlay's live preview; they're
               # display-only, so finals and release latency are unaffected.
               ("interim_results", "true"), ("endpointing", str(_ENDPOINTING_MS))]
+    if diarize:
+        params.append(("diarize", "true"))   # per-word speaker labels for main-speaker filtering
     if language and language != "auto":
         params.append(("language", language))
     for kt in keyterms or []:
         if kt.strip():
             params.append(("keyterm", kt.strip()[:50]))   # bias toward custom vocabulary
     return f"{LISTEN_WS}?{urlencode(params)}"
+
+
+def _join_words(words: list[str]) -> str:
+    """Rebuild text from individual words, tidying the spacing that word-level
+    splitting leaves before punctuation ("hi , there" -> "hi, there")."""
+    return re.sub(r"\s+([,.!?;:])", r"\1", " ".join(words)).strip()
 
 
 class GrokLive:
@@ -85,13 +96,16 @@ class GrokLive:
 
     def __init__(self, key: str, model: str, sample_rate: int,
                  language: str = "auto", keyterms: list[str] | None = None,
-                 on_interim: Callable[[str], None] | None = None) -> None:
+                 on_interim: Callable[[str], None] | None = None,
+                 diarize: bool = False) -> None:
         self._key = key
-        self._url = _ws_url(model, sample_rate, language, keyterms or [])
+        self._diarize = diarize
+        self._url = _ws_url(model, sample_rate, language, keyterms or [], diarize)
         self._q: queue.Queue = queue.Queue()
         self._finals: list[str] = []
         self._inserts: list[tuple[int, str]] = []   # (finals-index, clipboard text)
         self._pending_clip: list[str] = []
+        self._words: list[tuple[str, object]] = []   # (word, speaker) for main-speaker filtering
         self._last_tail = ""
         self._utt_had_chunk = False          # did a chunk-final arrive in the current utterance?
         self._on_interim = on_interim
@@ -149,11 +163,39 @@ class GrokLive:
             parts.append(tail)
         return " ".join(p for p in parts if p).strip()
 
+    def _accumulate_words(self, data: dict) -> None:
+        """Collect per-word (word, speaker) from a final, for main-speaker
+        filtering. No-op unless diarization is on."""
+        if not self._diarize:
+            return
+        for w in data.get("words") or []:
+            wt = (w.get("text") or w.get("word") or "").strip()
+            if wt:
+                self._words.append((wt, w.get("speaker")))
+
+    def _main_speaker_text(self) -> str | None:
+        """Keep only the dominant speaker's words (the user), dropping background
+        voices. Returns None when there's nothing usable to filter (fall back to
+        the plain transcript)."""
+        labelled = [(wt, sp) for wt, sp in self._words if sp is not None]
+        speakers = Counter(sp for _, sp in labelled)
+        if len(speakers) < 2:
+            return None   # zero or one speaker — nothing to isolate
+        main = speakers.most_common(1)[0][0]
+        # Keep the main speaker's words plus any unlabelled ones (safer than dropping).
+        kept = [wt for wt, sp in self._words if sp == main or sp is None]
+        return _join_words(kept) or None
+
     def _assemble(self) -> str:
         if self._pending_clip:
             idx = len(self._finals)
             self._inserts.extend((idx, clip) for clip in self._pending_clip)
             self._pending_clip = []
+        if self._diarize:
+            filtered = self._main_speaker_text()
+            if filtered is not None:
+                clips = " ".join(txt for _, txt in self._inserts)
+                return (filtered + ((" " + clips) if clips else "")).strip()
         return self._render()
 
     async def _send(self) -> None:
@@ -208,9 +250,11 @@ class GrokLive:
                     # arrived for this utterance; otherwise it doubles the text.
                     if text and not self._utt_had_chunk:
                         self._commit_final(text)
+                        self._accumulate_words(data)
                     self._utt_had_chunk = False    # next utterance starts fresh
                 else:
                     self._commit_final(text)       # incremental chunk-final
+                    self._accumulate_words(data)
                     self._utt_had_chunk = True
             elif text:
                 self._emit_interim(text)           # live, not-yet-final tail
@@ -264,13 +308,14 @@ class GrokLive:
 
 def make_live(model: str, sample_rate: int, language: str,
               keyterms: list[str] | None = None,
-              on_interim: Callable[[str], None] | None = None) -> GrokLive | None:
+              on_interim: Callable[[str], None] | None = None,
+              diarize: bool = False) -> GrokLive | None:
     """A live session if a key is configured, else None (caller falls back)."""
     key = get_api_key(PROVIDER_ID)
     if not key:
         return None
     return GrokLive(key, model or DEFAULT_MODEL, sample_rate, language,
-                    keyterms, on_interim)
+                    keyterms, on_interim, diarize=diarize)
 
 
 def result(text: str, language: str) -> TranscriptionResult:

@@ -1424,6 +1424,8 @@ class TestGrokLive:
         gl._pending_clip = []
         gl._last_tail = ""
         gl._utt_had_chunk = False
+        gl._diarize = False
+        gl._words = []
         gl._on_interim = seen.append
         return gl, seen
 
@@ -1482,6 +1484,29 @@ class TestGrokLive:
         gl._handle_message(self._chunk("on Tuesday."))
         gl._handle_message(self._utt("The meeting is at on Tuesday."))  # repeat dropped
         assert gl._assemble() == "The meeting is at 123 Main St on Tuesday."
+
+    def test_isolate_main_speaker_drops_background_voice(self):
+        """With diarization on, keep the dominant speaker and drop other voices."""
+        gl, _ = self._live()
+        gl._diarize = True
+        gl._handle_message({
+            "type": "transcript.partial", "is_final": True, "speech_final": False,
+            "text": "turn off the lights hey",
+            "words": [{"text": "turn", "speaker": 0}, {"text": "off", "speaker": 0},
+                      {"text": "the", "speaker": 0}, {"text": "lights", "speaker": 0},
+                      {"text": "hey", "speaker": 1}]})   # background voice
+        assert gl._assemble() == "turn off the lights"
+
+    def test_isolate_noop_with_single_speaker(self):
+        """One speaker (or no labels) — fall back to the plain transcript."""
+        gl, _ = self._live()
+        gl._diarize = True
+        gl._handle_message({
+            "type": "transcript.partial", "is_final": True, "speech_final": False,
+            "text": "just me talking",
+            "words": [{"text": "just", "speaker": 0}, {"text": "me", "speaker": 0},
+                      {"text": "talking", "speaker": 0}]})
+        assert gl._assemble() == "just me talking"
 
 
 class TestTimeFormat:

@@ -4,7 +4,7 @@ import { Check, Cloud, Download, ExternalLink, HardDrive, Loader2, Radio, Refres
 import { api, bridge, SystemInfo, WhisperModelInfo } from "../lib/api";
 import { useBackendEvents } from "../lib/ws";
 import { useSettings } from "../hooks/useSettings";
-import { Badge, Button, Card, PageHeader, SecretInput, Section, cn } from "../components/ui";
+import { Badge, Button, Card, PageHeader, SecretInput, Section, Toggle, cn } from "../components/ui";
 
 interface KeyTestResult { connected: boolean; message: string; latency_ms?: number }
 
@@ -270,6 +270,10 @@ export default function ModelsPage() {
             <GroqKeyRow label="xAI API key" placeholder="Paste your xAI API key"
               providerId="grok" validate={api.validateGrok} onConfiguredChange={setGrokConfigured} />
             {grokConfigured && <GrokUsage />}
+            <Toggle label="Isolate my voice (experimental)"
+              description="Uses speaker detection to keep only the main (dominant) speaker and drop background voices. Best-effort — it can occasionally mislabel or clip a quiet moment. Grok only."
+              checked={settings.whisper.grok_isolate_speaker}
+              onChange={(v) => patch({ whisper: { grok_isolate_speaker: v } })} />
             <p className="text-[11px] text-muted">
               Grok Voice Transcribe (xAI) streams live like Deepgram, at a lower price ($0.20/hr). It needs an
               xAI <b>API</b> key from console.x.ai with its own billing — a SuperGrok/X subscription does not

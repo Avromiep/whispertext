@@ -158,7 +158,8 @@ class DictationPipeline:
         if cfg.whisper.engine == "grok":
             session = grok_service.make_live(
                 cfg.whisper.grok_model, rate, cfg.whisper.language, cfg.vocabulary.words,
-                on_interim=self._publish_partial)
+                on_interim=self._publish_partial,
+                diarize=cfg.whisper.grok_isolate_speaker)
         else:
             session = deepgram_service.make_live(
                 cfg.whisper.deepgram_model, rate, cfg.whisper.language, cfg.vocabulary.words,
