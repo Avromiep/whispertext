@@ -41,6 +41,7 @@ def test_exact_combo_triggers_and_releases(monkeypatch):
     assert calls["start"] == 1
     held.discard("shift")                     # let go of shift
     svc._on_event(_evt("left shift", "up"))
+    svc._ptt_release_check()                   # release grace elapses, combo still not held
     assert calls["stop"] == 1
 
 
@@ -89,7 +90,25 @@ def test_extra_key_after_recording_keeps_recording(monkeypatch):
     assert calls["stop"] == 0                  # keeps recording
     held.discard("win")
     svc._on_event(_evt("left windows", "up"))  # drop a combo key
+    svc._ptt_release_check()                    # release grace elapses, combo still not held
     assert calls["stop"] == 1
+
+
+def test_transient_release_blip_keeps_recording(monkeypatch):
+    """A momentary false 'released' reading must NOT end the recording: if the combo
+    is physically held again by the time the grace re-check runs, keep going."""
+    svc, calls, held = _make(monkeypatch)
+    held |= {"win", "shift"}
+    svc._on_event(_evt("left windows", "down"))
+    svc._on_event(_evt("left shift", "down"))
+    svc._ptt_commit()
+    assert calls["start"] == 1
+    held.discard("shift")                      # a blip: shift momentarily reads up
+    svc._on_event(_evt("left shift", "up"))    # arms the release re-check
+    assert calls["stop"] == 0                  # not stopped yet — grace pending
+    held.add("shift")                          # combo held again before the re-check
+    svc._ptt_release_check()
+    assert calls["stop"] == 0                  # blip ignored — still recording
 
 
 def _make_toggle(monkeypatch, clock):

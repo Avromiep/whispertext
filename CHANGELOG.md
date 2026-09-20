@@ -3,6 +3,15 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.72] — 2026-09-20
+
+### Fixed
+- **Push‑to‑talk no longer stops mid‑sentence.** A brief hiccup in Windows'
+  key‑state reading (or a momentary fingertip lift) could make WhisperText think
+  you'd let go of the hotkey and finish early while you were still holding it. It
+  now waits a fraction of a second and re‑checks before stopping, so a transient
+  blip can't cut you off.
+
 ## [1.0.71] — 2026-09-20
 
 ### Added

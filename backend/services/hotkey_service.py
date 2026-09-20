@@ -48,6 +48,12 @@ _MAX_REINSTALLS = 3
 # If another key joins in that window it's a larger shortcut (e.g. Win+Shift+T),
 # not dictation, so recording is skipped. Short enough to feel instant.
 _PTT_CHORD_WINDOW_S = 0.06
+# When the combo reads as released, wait this long and re-check live key state
+# before actually stopping. GetAsyncKeyState can momentarily report a held Win/
+# Shift key as up (a brief flicker, or a fingertip lift), which would otherwise
+# end a recording mid-sentence while the user is still holding the hotkey. Long
+# enough to ride out a blip, short enough that a real release still feels instant.
+_PTT_RELEASE_GRACE_S = 0.12
 # An unassigned virtual-key: apps ignore a stray key-up for it, but a live
 # low-level hook still sees it — so it's a safe liveness canary.
 _CANARY_VK = 0xE8
@@ -110,6 +116,8 @@ class HotkeyService:
         self._idle_since: float | None = None     # when we suspended the canary probe
         self._ptt_pending = False                 # combo held, waiting out the chord window
         self._ptt_timer: threading.Timer | None = None
+        self._stop_timer: threading.Timer | None = None   # release-grace re-check timer
+        self._ptt_started_at = 0.0                # for logging a suspiciously early stop
         # Cached hotkey config, refreshed off the hot path so the hook callback
         # never does a settings-file read (that per-event work was a stall risk).
         self._combo: set[str] = set()
@@ -161,6 +169,7 @@ class HotkeyService:
             # means it can't act on resume (spuriously stop, or leave a phantom
             # key that blocks the next exact-combo match).
             self._cancel_pending_ptt()
+            self._cancel_release_check()      # a pending re-check must not fire post-pause
             self._unregister_insert_hook()    # don't keep suppressing N while paused
             with self._lock:
                 self._down.clear()
@@ -253,10 +262,7 @@ class HotkeyService:
                 if self._ptt_pending and not self._combo_held(combo):
                     self._cancel_pending_ptt()   # released before the window elapsed
                 if self._ptt_active and not self._combo_held(combo):
-                    self._ptt_active = False
-                    self._insert_held = False
-                    self._unregister_insert_hook()
-                    self._dispatch(self.on_ptt_stop)
+                    self._arm_release_check()    # confirm after a grace period, don't stop on a blip
 
     @staticmethod
     def _dispatch(cb: Callable[[], None]) -> None:
@@ -269,6 +275,36 @@ class HotkeyService:
         if self._ptt_timer is not None:
             self._ptt_timer.cancel()
             self._ptt_timer = None
+
+    def _cancel_release_check(self) -> None:
+        if self._stop_timer is not None:
+            self._stop_timer.cancel()
+            self._stop_timer = None
+
+    def _arm_release_check(self) -> None:
+        """The combo just read as released: re-check after a short grace instead of
+        stopping now, so a momentary GetAsyncKeyState blip (or a fingertip lift)
+        can't end a recording the user is still holding. Assumes the lock is held."""
+        if self._stop_timer is not None:
+            return   # a re-check is already pending
+        self._stop_timer = threading.Timer(_PTT_RELEASE_GRACE_S, self._ptt_release_check)
+        self._stop_timer.daemon = True
+        self._stop_timer.start()
+
+    def _ptt_release_check(self) -> None:
+        """Grace elapsed: stop only if the combo is STILL not held (a real release).
+        If it came back, it was a blip — keep recording."""
+        with self._lock:
+            self._stop_timer = None
+            if not self._ptt_active or self._combo_held(self._combo):
+                return   # not recording, or the combo returned — a blip; keep going
+            held = time.monotonic() - self._ptt_started_at
+            self._ptt_active = False
+            self._insert_held = False
+            self._unregister_insert_hook()
+            self._dispatch(self.on_ptt_stop)
+        if held < 0.4:
+            log.info("push-to-talk stopped after a very short hold (%.2fs)", held)
 
     def _on_insert_key(self, event) -> None:
         """Dedicated suppressing hook for the insert key while recording: fires
@@ -318,6 +354,7 @@ class HotkeyService:
                     and not self._extra_modifier_held(self._combo)):
                 return   # combo released or an extra modifier joined during the wait
             self._ptt_active = True
+            self._ptt_started_at = time.monotonic()
         self._register_insert_hook()              # stop the insert key leaking to apps
         log.info("push-to-talk fired (down=%s)", sorted(self._down))
         self._dispatch(self.on_ptt_start)
@@ -361,13 +398,17 @@ class HotkeyService:
                 if self._paused:
                     continue
                 # Rescue a recording stuck on a missed key-up: if we think we're
-                # holding but the combo isn't physically down, end it.
+                # holding but the combo isn't physically down, end it — but confirm
+                # after the release grace first, so a transient key-state blip at a
+                # watchdog tick can't end a recording the user is still holding.
                 if self._ptt_active and not self._combo_held(self._combo):
-                    with self._lock:
-                        was_active, self._ptt_active = self._ptt_active, False
-                    if was_active:
-                        self._unregister_insert_hook()
-                        self._dispatch(self.on_ptt_stop)
+                    time.sleep(_PTT_RELEASE_GRACE_S)
+                    if self._ptt_active and not self._combo_held(self._combo):
+                        with self._lock:
+                            was_active, self._ptt_active = self._ptt_active, False
+                        if was_active:
+                            self._unregister_insert_hook()
+                            self._dispatch(self.on_ptt_stop)
                     continue
                 if self._ptt_active:
                     continue   # actively recording — the hook is obviously alive
