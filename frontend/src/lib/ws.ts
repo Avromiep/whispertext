@@ -12,6 +12,7 @@ export interface WTEvent {
   hands_free?: boolean;
   rdp_session?: boolean;
   detail?: string;
+  engine?: string;
   chars?: number;
   seconds?: number;
   model?: string;

@@ -3,6 +3,14 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.70] — 2026-09-20
+
+### Added
+- **The recording pill shows which engine is transcribing.** A small label (Grok,
+  Deepgram, Groq, or Local) sits at the top of the pill. If a live engine has to
+  fall back mid‑dictation, the label updates live to show the switch — e.g.
+  "Grok → Groq" in amber — so you can always see what actually handled it.
+
 ## [1.0.69] — 2026-09-18
 
 ### Fixed

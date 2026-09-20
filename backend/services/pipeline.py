@@ -136,10 +136,12 @@ class DictationPipeline:
             bus.error(str(exc), code="no_microphone")
             return
         self._clip_inserts = []                 # fresh per dictation
-        # rdp_session lets the overlay honor the "Remote Desktop compatibility"
-        # toggle live: over RDP the pill shows only when the setting is on.
-        bus.status("listening", hands_free=hands_free, rdp_session=is_remote_session())
         cfg = load_settings()
+        # rdp_session lets the overlay honor the "Remote Desktop compatibility"
+        # toggle live; engine lets the pill show which model is transcribing (and
+        # update it live if a fallback kicks in).
+        bus.status("listening", hands_free=hands_free, rdp_session=is_remote_session(),
+                   engine=cfg.whisper.engine)
         if cfg.whisper.engine in ("deepgram", "grok"):
             self._start_live(cfg)
         if hands_free and cfg.hotkeys.hands_free_auto_stop:
@@ -342,8 +344,10 @@ class DictationPipeline:
                 usage.record(s.engine, len(audio) / 16000)   # ~held seconds, for the spend estimate
                 return deepgram_service.result(text, s.language)
             # The live engine produced nothing (connection/stream failure) — tell
-            # the overlay why the spinner is now taking longer than usual.
-            bus.status("transcribing", detail="Live transcription unavailable — using backup…")
+            # the overlay why the spinner is now taking longer than usual, and that
+            # it's switched to the batch backup.
+            bus.status("transcribing", detail="Live transcription unavailable — using backup…",
+                       engine="groq")
 
         # Groq batch — also the fallback path for a failed live stream.
         if s.engine in ("groq", "deepgram", "grok"):
@@ -366,7 +370,8 @@ class DictationPipeline:
                 bus.notify("Cloud transcription unavailable — used local instead.", "warning")
             # Both cloud engines are unreachable; the local model on the CPU is the
             # slow path, so say so rather than leaving the spinner unexplained.
-            bus.status("transcribing", detail="Cloud unavailable — transcribing on this PC (slower)…")
+            bus.status("transcribing", detail="Cloud unavailable — transcribing on this PC (slower)…",
+                       engine="local")
         return whisper_service.transcribe(audio)
 
     @staticmethod

@@ -18,6 +18,10 @@ const STATUS_LABEL: Record<string, string> = {
   typing: "Typing…",
 };
 
+const ENGINE_LABEL: Record<string, string> = {
+  grok: "Grok", deepgram: "Deepgram", groq: "Groq", local: "Local",
+};
+
 const STRANDS = 14;
 
 export default function Overlay() {
@@ -26,6 +30,8 @@ export default function Overlay() {
   const [errorMsg, setErrorMsg] = useState("");
   const [partial, setPartial] = useState("");   // live Deepgram preview text
   const [detail, setDetail] = useState("");     // why a processing step is slow (fallbacks)
+  const [engine, setEngine] = useState("");     // engine transcribing right now (updates on fallback)
+  const selectedEngineRef = useRef("");         // the engine the user picked, to spot a fallback
   const [clipN, setClipN] = useState(0);        // bumped when clipboard is inserted
   const [clipShown, setClipShown] = useState(false);
   const level = useRef(0);          // live mic level 0..1 (smoothed in draw loop)
@@ -82,9 +88,13 @@ export default function Overlay() {
     // A processing step can carry a reason it's slow (e.g. a cloud engine fell
     // back to the local model); show it, and clear it on any status without one.
     setDetail(typeof e.detail === "string" ? e.detail : "");
+    // The engine can change mid-dictation (a live engine failing over to a
+    // backup); reflect it live in the pill.
+    if (typeof e.engine === "string") setEngine(e.engine);
     switch (e.state) {
       case "listening":
         rdpSessionRef.current = !!e.rdp_session;
+        selectedEngineRef.current = typeof e.engine === "string" ? e.engine : "";
         startRef.current = Date.now();
         setElapsed(0);
         transition("listening");
@@ -218,6 +228,13 @@ export default function Overlay() {
   const preview = partial.length > 300 ? partial.slice(-300) : partial;
   const showPreview = state === "listening" && preview.length > 0;
 
+  // Which engine is transcribing, shown live; on a fallback the label flips from
+  // the picked engine to the one actually running (e.g. "Grok → Groq").
+  const engLabel = ENGINE_LABEL[engine] || "";
+  const selLabel = ENGINE_LABEL[selectedEngineRef.current] || "";
+  const fellBack = !!engLabel && !!selLabel && engine !== selectedEngineRef.current;
+  const showEngine = !!engLabel && (state === "listening" || processing);
+
   return (
     <div className="h-screen w-screen flex items-end justify-center pb-2">
       <div
@@ -228,6 +245,12 @@ export default function Overlay() {
             : "bg-elevated border-border"}`}
         style={{ width: 336 }}
       >
+        {showEngine && (
+          <div className={`text-[10px] leading-none font-medium tracking-wide text-center
+            ${fellBack ? "text-amber-500" : "text-muted/80"}`}>
+            {fellBack ? `${selLabel} → ${engLabel}` : engLabel}
+          </div>
+        )}
         <div className="flex items-center gap-3">
           {state === "error" ? (
             <>
