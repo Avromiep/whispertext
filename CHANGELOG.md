@@ -3,6 +3,13 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.75] — 2026-09-23
+
+### Added
+- **The clipboard‑insert key is now changeable.** On the Hotkeys page you can Record
+  a new key for the mid‑dictation clipboard insert (still defaults to N). Tap it while
+  holding push‑to‑talk to drop your clipboard into the sentence at that spot.
+
 ## [1.0.74] — 2026-09-23
 
 ### Added
