@@ -48,12 +48,13 @@ _MAX_REINSTALLS = 3
 # If another key joins in that window it's a larger shortcut (e.g. Win+Shift+T),
 # not dictation, so recording is skipped. Short enough to feel instant.
 _PTT_CHORD_WINDOW_S = 0.06
-# When the combo reads as released, wait this long and re-check live key state
-# before actually stopping. GetAsyncKeyState can momentarily report a held Win/
-# Shift key as up (a brief flicker, or a fingertip lift), which would otherwise
-# end a recording mid-sentence while the user is still holding the hotkey. Long
-# enough to ride out a blip, short enough that a real release still feels instant.
-_PTT_RELEASE_GRACE_S = 0.12
+# Only a DELIBERATE release ends a recording: when the combo reads as released,
+# wait this long and re-check live key state before stopping. A pause-relax of the
+# grip, or a brief GetAsyncKeyState hiccup during a thinking pause, would otherwise
+# end a recording mid-sentence while the user is still holding — the exact thing the
+# user hit. Generous by design (they'd rather a slightly delayed end than a cut-off);
+# the cost is ~this much delay after you truly let go. Tunable if it's too long/short.
+_PTT_RELEASE_GRACE_S = 0.6
 # An unassigned virtual-key: apps ignore a stray key-up for it, but a live
 # low-level hook still sees it — so it's a safe liveness canary.
 _CANARY_VK = 0xE8
@@ -299,12 +300,13 @@ class HotkeyService:
             if not self._ptt_active or self._combo_held(self._combo):
                 return   # not recording, or the combo returned — a blip; keep going
             held = time.monotonic() - self._ptt_started_at
+            keys = {k: self._combo_held({k}) for k in self._combo}
             self._ptt_active = False
             self._insert_held = False
             self._unregister_insert_hook()
             self._dispatch(self.on_ptt_stop)
-        if held < 0.4:
-            log.info("push-to-talk stopped after a very short hold (%.2fs)", held)
+        # Diagnostic: every real stop, with hold time + which combo key read as up.
+        log.info("PTT stop (key-event): held %.2fs, keys=%s", held, keys)
 
     def _on_insert_key(self, event) -> None:
         """Dedicated suppressing hook for the insert key while recording: fires
@@ -404,11 +406,14 @@ class HotkeyService:
                 if self._ptt_active and not self._combo_held(self._combo):
                     time.sleep(_PTT_RELEASE_GRACE_S)
                     if self._ptt_active and not self._combo_held(self._combo):
+                        held = time.monotonic() - self._ptt_started_at
+                        keys = {k: self._combo_held({k}) for k in self._combo}
                         with self._lock:
                             was_active, self._ptt_active = self._ptt_active, False
                         if was_active:
                             self._unregister_insert_hook()
                             self._dispatch(self.on_ptt_stop)
+                            log.info("PTT stop (watchdog): held %.2fs, keys=%s", held, keys)
                     continue
                 if self._ptt_active:
                     continue   # actively recording — the hook is obviously alive

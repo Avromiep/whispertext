@@ -108,6 +108,7 @@ class GrokLive:
         self._words: list[tuple[str, object]] = []   # (word, speaker) for main-speaker filtering
         self._last_tail = ""
         self._utt_had_chunk = False          # did a chunk-final arrive in the current utterance?
+        self._final_event = asyncio.Event()  # set when any is_final lands (for the fast finish)
         self._on_interim = on_interim
         self._ws = None
         self._send_task: asyncio.Task | None = None
@@ -256,6 +257,7 @@ class GrokLive:
                     self._commit_final(text)       # incremental chunk-final
                     self._accumulate_words(data)
                     self._utt_had_chunk = True
+                self._final_event.set()            # a finalization landed — finish() can return
             elif text:
                 self._emit_interim(text)           # live, not-yet-final tail
         # transcript.done is an empty end-of-stream marker (len 0) — nothing to do.
@@ -272,26 +274,48 @@ class GrokLive:
             pass
 
     async def finish(self, timeout: float = 8.0) -> str:
-        """Flush queued audio, signal end-of-audio, return the transcript."""
+        """Return the transcript as fast as possible on hotkey release.
+
+        Everything spoken up to the last pause is already in `_finals` (streamed
+        live). Only the current tail needs finalizing, so send `Finalize` (xAI's
+        push-to-talk fast-flush) and return the instant that final lands — instead
+        of `audio.done`, whose end-of-stream wrap-up took ~2.2s. The socket is torn
+        down in the background so it never blocks typing.
+        """
         if self._failed or self._ws is None:
             return ""
+        t0 = time.monotonic()
         self._q.put_nowait(None)
         try:
             if self._send_task:
-                await asyncio.wait_for(self._send_task, timeout=timeout)
+                await asyncio.wait_for(self._send_task, timeout=4.0)
         except Exception:
             pass
+        if self._last_tail:                        # words still pending — flush them
+            self._final_event.clear()
+            try:
+                await self._ws.send(json.dumps({"type": "Finalize"}))
+                await asyncio.wait_for(self._final_event.wait(), timeout=2.5)
+            except Exception:
+                pass
+        text = self._assemble()
         try:
-            await self._ws.send(json.dumps({"type": "audio.done"}))  # flush + finalize
-            if self._recv_task:
-                await asyncio.wait_for(self._recv_task, timeout=timeout)
+            asyncio.create_task(self._close_quietly())   # don't block on teardown
+        except Exception:
+            pass
+        log.info("Grok finish: %.2fs (tail=%s)", time.monotonic() - t0, bool(self._last_tail))
+        return text
+
+    async def _close_quietly(self) -> None:
+        """End the session server-side and close the socket, off the hot path."""
+        try:
+            await self._ws.send(json.dumps({"type": "audio.done"}))
         except Exception:
             pass
         try:
             await self._ws.close()
         except Exception:
             pass
-        return self._assemble()
 
     async def close(self) -> None:
         """Abandon the session without waiting for a transcript."""

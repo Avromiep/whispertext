@@ -3,6 +3,22 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.73] — 2026-09-23
+
+### Fixed
+- **Grok (xAI) types almost instantly on release.** It was waiting ~2.2s for xAI's
+  end‑of‑stream wrap‑up before typing; it now uses xAI's fast push‑to‑talk finalize,
+  returns the moment your last words land, and closes the connection in the
+  background. No accuracy loss — everything is already transcribed as you speak.
+- **Push‑to‑talk no longer stops on a pause.** Only a deliberate, sustained release
+  ends a recording now — a momentary grip‑relax or key‑state hiccup while you pause
+  to think won't cut you off mid‑sentence.
+
+### Changed
+- **Clearer engine labels on the pill** — "Grok · xAI" and "Groq · Whisper" (so the
+  near‑identical names can't be confused), and the fallback text is higher‑contrast
+  and readable on the light theme.
+
 ## [1.0.72] — 2026-09-20
 
 ### Fixed

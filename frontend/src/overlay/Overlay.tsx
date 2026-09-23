@@ -19,7 +19,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const ENGINE_LABEL: Record<string, string> = {
-  grok: "Grok", deepgram: "Deepgram", groq: "Groq", local: "Local",
+  grok: "Grok · xAI", deepgram: "Deepgram", groq: "Groq · Whisper", local: "Local",
 };
 
 const STRANDS = 14;
@@ -246,8 +246,8 @@ export default function Overlay() {
         style={{ width: 336 }}
       >
         {showEngine && (
-          <div className={`text-[10px] leading-none font-medium tracking-wide text-center
-            ${fellBack ? "text-amber-500" : "text-muted/80"}`}>
+          <div className={`text-[10px] leading-none font-semibold tracking-wide text-center
+            ${fellBack ? (dark ? "text-amber-300" : "text-amber-700") : "text-muted/80"}`}>
             {fellBack ? `${selLabel} → ${engLabel}` : engLabel}
           </div>
         )}
@@ -299,7 +299,8 @@ export default function Overlay() {
           </div>
         )}
         {processing && detail && (
-          <div className="text-[11px] leading-snug text-amber-500/90 px-0.5 border-t border-border/60 pt-1.5">
+          <div className={`text-[11px] leading-snug font-medium px-0.5 border-t border-border/60 pt-1.5
+            ${dark ? "text-amber-300" : "text-amber-700"}`}>
             {detail}
           </div>
         )}

@@ -1426,6 +1426,8 @@ class TestGrokLive:
         gl._utt_had_chunk = False
         gl._diarize = False
         gl._words = []
+        import asyncio as _asyncio
+        gl._final_event = _asyncio.Event()
         gl._on_interim = seen.append
         return gl, seen
 
