@@ -51,10 +51,11 @@ _PTT_CHORD_WINDOW_S = 0.06
 # Only a DELIBERATE release ends a recording: when the combo reads as released,
 # wait this long and re-check live key state before stopping. A pause-relax of the
 # grip, or a brief GetAsyncKeyState hiccup during a thinking pause, would otherwise
-# end a recording mid-sentence while the user is still holding — the exact thing the
-# user hit. Generous by design (they'd rather a slightly delayed end than a cut-off);
-# the cost is ~this much delay after you truly let go. Tunable if it's too long/short.
-_PTT_RELEASE_GRACE_S = 0.6
+# end a recording mid-sentence while the user is still holding. This is a direct
+# trade-off — longer tolerates longer pause-relaxes but adds delay to EVERY release
+# (very noticeable on one-word dictations); shorter is snappier but a long relax can
+# cut off. 0.35s is the balance point; tunable / could become a user slider.
+_PTT_RELEASE_GRACE_S = 0.35
 # An unassigned virtual-key: apps ignore a stray key-up for it, but a live
 # low-level hook still sees it — so it's a safe liveness canary.
 _CANARY_VK = 0xE8
