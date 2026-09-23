@@ -911,8 +911,8 @@ class TestHotkeys:
         svc._on_event(Ev("left shift", "down"))
         svc._ptt_commit()                # chord window elapses with only the combo
         held.discard("shift")
-        svc._on_event(Ev("left shift", "up"))
-        time.sleep(0.15)
+        svc._on_event(Ev("left shift", "up"))   # arms the release re-check
+        svc._ptt_release_check()                # release grace elapses, combo still not held
         assert events == ["start", "stop"]
 
     def test_double_tap_ignored_when_hands_free_disabled(self, monkeypatch):
