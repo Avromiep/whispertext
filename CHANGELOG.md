@@ -3,6 +3,14 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.74] — 2026-09-23
+
+### Added
+- **Release‑timing slider (Hotkeys page).** You can now tune how long WhisperText
+  waits after you let go of push‑to‑talk before it finishes. Higher tolerates longer
+  thinking‑pauses without cutting you off; lower is snappier, especially on short
+  one‑word dictations. Takes effect immediately.
+
 ## [1.0.73] — 2026-09-23
 
 ### Fixed

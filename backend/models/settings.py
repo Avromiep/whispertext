@@ -33,6 +33,10 @@ class HotkeySettings(BaseModel):
     # While holding push-to-talk and dictating, tapping this key splices the
     # clipboard into the transcript at that point (default Win+Shift+N).
     clipboard_insert_key: str = "n"
+    # After you let go of push-to-talk, wait this long and re-check before ending —
+    # so a grip-relax or key-state blip during a pause doesn't cut you off. Higher =
+    # more forgiving of pauses but a longer delay after every release; lower = snappier.
+    release_grace_ms: int = 350
     hands_free_enabled: bool = True
     # Hands-free ends itself when you stop talking, so there's no need to
     # double-tap again. Off falls back to manual double-tap-to-stop only.

@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { api } from "../lib/api";
 import { useSettings } from "../hooks/useSettings";
-import { Button, Kbd, PageHeader, Section, cn } from "../components/ui";
+import { Button, Kbd, PageHeader, Section, Slider, cn } from "../components/ui";
 
 export default function HotkeysPage() {
   const { settings, patch } = useSettings();
@@ -50,6 +50,14 @@ export default function HotkeysPage() {
 
       <Section title="Bindings">
         <Binding label="Push-to-talk" description="Hold to record, release to type" value={hk.push_to_talk} which="ptt" />
+      </Section>
+
+      <Section title="Release timing"
+        description="After you let go, WhisperText waits this long and re-checks before finishing — so a grip-relax or key hiccup during a thinking pause doesn't cut you off. Higher = more forgiving of pauses; lower = snappier, especially on short one-word dictations.">
+        <Slider label="Wait after release" min={100} max={1000} step={50}
+          value={hk.release_grace_ms}
+          format={(v) => `${(v / 1000).toFixed(2)} s`}
+          onChange={(v) => patch({ hotkeys: { release_grace_ms: v } })} />
       </Section>
 
       <Section title="Tips">

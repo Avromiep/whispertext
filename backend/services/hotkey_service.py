@@ -127,6 +127,7 @@ class HotkeyService:
         self._insert_key = "n"                # clipboard-insert key (Win+Shift+N)
         self._hands_free_enabled = True
         self._double_tap_ms = 350
+        self._release_grace_s = _PTT_RELEASE_GRACE_S   # user-tunable (hotkeys.release_grace_ms)
 
     # ------------------------------------------------------------------ control
     def refresh_config(self) -> None:
@@ -142,6 +143,8 @@ class HotkeyService:
             # toggle key like Alt) can never fire a recording by accident.
             self._hands_free_enabled = False
             self._double_tap_ms = hk.double_tap_window_ms
+            # Clamp to a sane range so a bad value can't wedge the stop entirely.
+            self._release_grace_s = min(1.5, max(0.05, hk.release_grace_ms / 1000))
         except Exception:
             log.exception("Hotkey config refresh failed; keeping previous bindings")
 
@@ -289,7 +292,7 @@ class HotkeyService:
         can't end a recording the user is still holding. Assumes the lock is held."""
         if self._stop_timer is not None:
             return   # a re-check is already pending
-        self._stop_timer = threading.Timer(_PTT_RELEASE_GRACE_S, self._ptt_release_check)
+        self._stop_timer = threading.Timer(self._release_grace_s, self._ptt_release_check)
         self._stop_timer.daemon = True
         self._stop_timer.start()
 
@@ -405,7 +408,7 @@ class HotkeyService:
                 # after the release grace first, so a transient key-state blip at a
                 # watchdog tick can't end a recording the user is still holding.
                 if self._ptt_active and not self._combo_held(self._combo):
-                    time.sleep(_PTT_RELEASE_GRACE_S)
+                    time.sleep(self._release_grace_s)
                     if self._ptt_active and not self._combo_held(self._combo):
                         held = time.monotonic() - self._ptt_started_at
                         keys = {k: self._combo_held({k}) for k in self._combo}
