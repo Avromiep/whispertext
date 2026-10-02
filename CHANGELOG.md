@@ -3,6 +3,15 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.76] — 2026-10-02
+
+### Changed
+- **The Grok spend meter now shows past‑30‑days and all‑time** (instead of just the
+  current calendar month), and is clearly labeled as WhisperText's own dictation
+  estimate — **not** your full xAI account bill, which includes any other
+  projects/keys and lives at console.x.ai. Usage is now tracked per day so the
+  rolling 30‑day figure is accurate.
+
 ## [1.0.75] — 2026-09-23
 
 ### Added

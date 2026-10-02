@@ -119,12 +119,18 @@ function DeepgramBalance() {
   );
 }
 
-/** Estimated Grok spend this month. xAI's exact bill lives in its console and
- * needs a separate management key; this is a no-extra-key estimate from how much
- * audio you've transcribed via Grok times the streaming rate. */
+interface GrokUsageResult {
+  rate_per_hour: number;
+  all_time_usd: number; all_time_minutes: number;
+  days30_usd: number; days30_minutes: number;
+}
+
+/** WhisperText's OWN estimated Grok spend (NOT your account bill — that includes any
+ * other projects/keys and lives at console.x.ai). A no-extra-key estimate from how
+ * much audio WhisperText transcribed via Grok times the streaming rate. */
 function GrokUsage() {
   const [loading, setLoading] = useState(true);
-  const [u, setU] = useState<{ minutes: number; rate_per_hour: number; estimated_usd: number } | null>(null);
+  const [u, setU] = useState<GrokUsageResult | null>(null);
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -132,22 +138,32 @@ function GrokUsage() {
   }, []);
   useEffect(() => { refresh(); }, [refresh]);
 
+  const money = (usd: number, mins: number) =>
+    usd >= 0.01 ? `~$${usd.toFixed(2)}` : (mins > 0 ? "< $0.01" : "$0.00");
+
   return (
     <div className="rounded-xl border border-border bg-black/5 p-3">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-xs text-muted">Estimated spend this month</div>
+          <div className="text-xs text-muted">WhisperText dictation — estimated Grok spend</div>
           {loading ? (
             <div className="text-sm font-medium flex items-center gap-1.5 mt-0.5">
               <Loader2 size={14} className="animate-spin" /> Checking…
             </div>
           ) : u ? (
             <>
-              <div className="text-lg font-semibold mt-0.5">
-                {u.estimated_usd >= 0.01 ? `~$${u.estimated_usd.toFixed(2)}` : (u.minutes > 0 ? "< $0.01" : "$0.00")}
+              <div className="flex items-baseline gap-4 mt-1">
+                <div>
+                  <div className="text-lg font-semibold leading-none">{money(u.days30_usd, u.days30_minutes)}</div>
+                  <div className="text-[10px] text-muted mt-1">past 30 days · {u.days30_minutes.toFixed(1)} min</div>
+                </div>
+                <div>
+                  <div className="text-lg font-semibold leading-none">{money(u.all_time_usd, u.all_time_minutes)}</div>
+                  <div className="text-[10px] text-muted mt-1">all time · {u.all_time_minutes.toFixed(1)} min</div>
+                </div>
               </div>
-              <div className="text-[11px] text-muted mt-0.5">
-                {u.minutes.toFixed(1)} min of audio · ${u.rate_per_hour.toFixed(2)}/hr · estimate, see console.x.ai for the exact bill
+              <div className="text-[11px] text-muted mt-2">
+                Estimate at ${u.rate_per_hour.toFixed(2)}/hr, WhisperText only. Your full xAI bill (all projects) is at console.x.ai.
               </div>
             </>
           ) : (

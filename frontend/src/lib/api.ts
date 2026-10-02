@@ -88,7 +88,7 @@ export const api = {
   validateDeepgram: () => request<{ connected: boolean; message: string; latency_ms?: number }>("/transcription/deepgram/validate", { method: "POST" }),
   deepgramBalance: () => request<{ ok: boolean; amount?: number; units?: string; message?: string; needs_admin?: boolean }>("/transcription/deepgram/balance"),
   validateGrok: () => request<{ connected: boolean; message: string; latency_ms?: number }>("/transcription/grok/validate", { method: "POST" }),
-  grokUsage: () => request<{ engine: string; month: string; seconds: number; minutes: number; rate_per_hour: number; estimated_usd: number }>("/transcription/grok/usage"),
+  grokUsage: () => request<{ engine: string; rate_per_hour: number; all_time_usd: number; all_time_minutes: number; days30_usd: number; days30_minutes: number }>("/transcription/grok/usage"),
   checkUpdates: () => request<{ current: string; latest: string; update_available: boolean; url: string }>("/updates/check", { method: "POST" }),
   tailLogs: (lines = 400) => request<{ text: string; shown: number; total: number }>(`/logs/tail?lines=${lines}`),
 };
