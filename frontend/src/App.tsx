@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  Home, Mic, BookOpen, Sparkles, Volume2, Keyboard, HistoryIcon, Package, Wrench, Info,
+  Home, Mic, BookOpen, Replace, Sparkles, Volume2, Keyboard, HistoryIcon, Package, Wrench, Info,
 } from "lucide-react";
 import { SettingsContext, useSettingsProvider } from "./hooks/useSettings";
 import { useBackendEvents, WTEvent } from "./lib/ws";
@@ -10,6 +10,7 @@ import Onboarding from "./pages/Onboarding";
 import HomePage from "./pages/HomePage";
 import DictationPage from "./pages/DictationPage";
 import VocabularyPage from "./pages/VocabularyPage";
+import TextReplacementPage from "./pages/TextReplacementPage";
 import AIPage from "./pages/AIPage";
 import AudioPage from "./pages/AudioPage";
 import HotkeysPage from "./pages/HotkeysPage";
@@ -19,13 +20,14 @@ import AdvancedPage from "./pages/AdvancedPage";
 import AboutPage from "./pages/AboutPage";
 
 export type PageId =
-  | "home" | "dictation" | "vocabulary" | "ai" | "audio" | "hotkeys"
+  | "home" | "dictation" | "vocabulary" | "replacements" | "ai" | "audio" | "hotkeys"
   | "history" | "models" | "advanced" | "about";
 
 const NAV: { id: PageId; label: string; icon: typeof Home }[] = [
   { id: "home", label: "Home", icon: Home },
   { id: "dictation", label: "Dictation", icon: Mic },
   { id: "vocabulary", label: "Vocabulary", icon: BookOpen },
+  { id: "replacements", label: "Text Replacement", icon: Replace },
   { id: "ai", label: "AI", icon: Sparkles },
   { id: "audio", label: "Audio", icon: Volume2 },
   { id: "hotkeys", label: "Hotkeys", icon: Keyboard },
@@ -150,6 +152,7 @@ export default function App() {
             {page === "home" && <HomePage go={setPage} />}
             {page === "dictation" && <DictationPage />}
             {page === "vocabulary" && <VocabularyPage />}
+            {page === "replacements" && <TextReplacementPage />}
             {page === "ai" && <AIPage />}
             {page === "audio" && <AudioPage />}
             {page === "hotkeys" && <HotkeysPage />}

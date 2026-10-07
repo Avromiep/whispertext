@@ -129,6 +129,15 @@ class PerTabRule(BaseModel):
     blank_line: bool = True
 
 
+class TextReplacement(BaseModel):
+    """A user substitution applied to the final transcript: whenever `match`
+    appears as a whole word/phrase (case-insensitive), it's replaced with
+    `replace` (e.g. "gonna" -> "going to"). The replacement keeps the matched
+    text's leading capitalization, so sentence-start "Gonna" -> "Going to"."""
+    match: str = ""
+    replace: str = ""
+
+
 class FormattingSettings(BaseModel):
     auto_capitalize: bool = True
     auto_punctuate: bool = True
@@ -143,6 +152,9 @@ class FormattingSettings(BaseModel):
     # rule's `match` (case-insensitive), each sentence goes on its own line —
     # with or without a blank line between, per the rule.
     per_tab_rules: list[PerTabRule] = Field(default_factory=list)
+    # User text replacements: whole-word/phrase substitutions applied to the final
+    # transcript (e.g. "gonna" -> "going to"), case-insensitive, caps preserved.
+    text_replacements: list[TextReplacement] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod

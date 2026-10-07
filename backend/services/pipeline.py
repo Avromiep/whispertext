@@ -27,7 +27,8 @@ from backend.storage.database import HistoryStore
 from backend.utils import encryption
 from backend.utils.logger import get_logger
 from backend.utils import usage
-from backend.utils.text import (apply_vocabulary_casing, build_vocabulary_prompt,
+from backend.utils.text import (apply_text_replacements, apply_vocabulary_casing,
+                                 build_vocabulary_prompt,
                                  fix_numeral_idioms, fix_ordinal_idioms,
                                  remove_filler_words, spoken_fractions_to_words,
                                  strip_time_leading_zero,
@@ -421,6 +422,10 @@ class DictationPipeline:
         text = spoken_fractions_to_words(text)
         # Times come out naturally: "07:40" -> "7:40" (drop the zero-padded hour).
         text = strip_time_leading_zero(text)
+        # User text replacements ("gonna" -> "going to"), applied last so the
+        # substituted phrase is final.
+        if f.text_replacements:
+            text = apply_text_replacements(text, f.text_replacements)
         if text and f.auto_capitalize:
             text = text[0].upper() + text[1:]
         return text

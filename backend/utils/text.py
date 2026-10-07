@@ -152,6 +152,28 @@ def spoken_fractions_to_words(text: str) -> str:
     return _FRACTION.sub(lambda m: _cap(_FRACTION_WORDS[m.group(0)], text, m.start()), text)
 
 
+def apply_text_replacements(text: str, rules: list) -> str:
+    """Apply user substitutions (e.g. "gonna" -> "going to") to `text`. Each rule
+    matches its `match` as a whole word/phrase, case-insensitively, and keeps the
+    matched text's leading capitalization (so "Gonna" at a sentence start becomes
+    "Going to"). Longer matches are applied first so a multi-word rule wins over a
+    shorter overlapping one. No-op when there are no rules."""
+    for rule in sorted(rules, key=lambda r: len(getattr(r, "match", "") or ""), reverse=True):
+        match = (getattr(rule, "match", "") or "").strip()
+        replace = (getattr(rule, "replace", "") or "")
+        if not match:
+            continue
+        pattern = re.compile(r"(?<![\w'])" + re.escape(match) + r"(?![\w'])", re.IGNORECASE)
+
+        def _sub(m: re.Match, repl=replace) -> str:
+            # Keep the original's leading capital (sentence start / proper noun).
+            return repl[0].upper() + repl[1:] if repl and m.group(0)[:1].isupper() else repl
+        text = pattern.sub(_sub, text)
+    # Collapse any horizontal-whitespace gaps a deletion/replacement opened up
+    # (e.g. removing a word), without touching line breaks.
+    return re.sub(r"[^\S\r\n]{2,}", " ", text).strip()
+
+
 def sentences_on_separate_lines(text: str, blank_line: bool = True) -> str:
     """Put each sentence on its own line. With `blank_line` (default) an empty
     line separates each; otherwise the sentences sit on consecutive lines."""

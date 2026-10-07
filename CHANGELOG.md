@@ -3,6 +3,14 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.77] — 2026-10-07
+
+### Added
+- **Text Replacement.** A new sidebar section for automatic word/phrase
+  substitutions — say the left, get the right (e.g. "gonna" → "going to", "omw" →
+  "on my way"). Matching is whole‑word and case‑insensitive and keeps your
+  capitalization; leave the right side blank to simply delete a word.
+
 ## [1.0.76] — 2026-10-02
 
 ### Changed

@@ -604,6 +604,49 @@ class TestNumeralIdioms:
         assert spoken_fractions_to_words(text) == expected
 
 
+class TestTextReplacements:
+    """User substitutions applied to the final transcript (e.g. gonna -> going to)."""
+
+    def _rules(self, pairs):
+        from backend.models.settings import TextReplacement
+        return [TextReplacement(match=m, replace=r) for m, r in pairs]
+
+    def test_basic_replacement(self):
+        from backend.utils.text import apply_text_replacements
+        out = apply_text_replacements("I'm gonna leave", self._rules([("gonna", "going to")]))
+        assert out == "I'm going to leave"
+
+    def test_preserves_leading_capital(self):
+        from backend.utils.text import apply_text_replacements
+        out = apply_text_replacements("Gonna win", self._rules([("gonna", "going to")]))
+        assert out == "Going to win"
+
+    def test_whole_word_only(self):
+        from backend.utils.text import apply_text_replacements
+        out = apply_text_replacements("gonnae is a word", self._rules([("gonna", "going to")]))
+        assert out == "gonnae is a word"      # no match inside a longer word
+
+    def test_case_insensitive_match(self):
+        from backend.utils.text import apply_text_replacements
+        out = apply_text_replacements("OMW now", self._rules([("omw", "on my way")]))
+        assert out == "On my way now"          # matched caps -> capitalized replacement
+
+    def test_longer_match_wins(self):
+        from backend.utils.text import apply_text_replacements
+        out = apply_text_replacements("new york trip",
+                                      self._rules([("york", "Y"), ("new york", "NYC")]))
+        assert out == "NYC trip"
+
+    def test_blank_replacement_deletes_and_tidies_spacing(self):
+        from backend.utils.text import apply_text_replacements
+        out = apply_text_replacements("it's basically done", self._rules([("basically", "")]))
+        assert out == "it's done"              # no double space left behind
+
+    def test_no_rules_is_noop(self):
+        from backend.utils.text import apply_text_replacements
+        assert apply_text_replacements("leave me alone", []) == "leave me alone"
+
+
 # ---------------------------------------------------- per-window sentence layout
 class TestSentenceLayout:
     @pytest.mark.parametrize("text,expected", [
