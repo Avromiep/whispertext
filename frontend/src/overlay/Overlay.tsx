@@ -29,6 +29,7 @@ export default function Overlay() {
   const [elapsed, setElapsed] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
   const [partial, setPartial] = useState("");   // live Deepgram preview text
+  const [segments, setSegments] = useState<{ text: string; original?: string }[] | null>(null);
   const [detail, setDetail] = useState("");     // why a processing step is slow (fallbacks)
   const [engine, setEngine] = useState("");     // engine transcribing right now (updates on fallback)
   const selectedEngineRef = useRef("");         // the engine the user picked, to spot a fallback
@@ -75,6 +76,7 @@ export default function Overlay() {
     }
     if (e.type === "partial") {
       setPartial(typeof e.text === "string" ? e.text : "");
+      setSegments(Array.isArray(e.segments) ? e.segments : null);
       return;
     }
     if (e.type === "error") {
@@ -139,7 +141,7 @@ export default function Overlay() {
   // The live preview only makes sense while listening; drop it the moment the
   // stream ends so the pill doesn't linger on stale words during typing/done.
   useEffect(() => {
-    if (state !== "listening") setPartial("");
+    if (state !== "listening") { setPartial(""); setSegments(null); }
   }, [state]);
 
   // Single-line preview: keep it scrolled hard right so the newest words stay
@@ -293,9 +295,22 @@ export default function Overlay() {
         {showPreview && (
           <div
             ref={previewRef}
-            className="text-[11px] leading-snug text-muted whitespace-nowrap overflow-hidden px-0.5 border-t border-border/60 pt-1.5"
+            className="text-[11px] leading-snug text-muted whitespace-nowrap overflow-x-hidden px-0.5 border-t border-border/60 pt-3"
           >
-            {preview}
+            {segments
+              ? segments.map((s, i) => (
+                  s.original ? (
+                    // Replacement: the result flows inline; the word you actually
+                    // said is annotated (highlighted) above it, ruby-style.
+                    <ruby key={i} className="align-baseline">
+                      {s.text}
+                      <rt className="text-[8px] font-semibold text-accent bg-accent/10 rounded-[3px] px-0.5 leading-none">
+                        {s.original}
+                      </rt>
+                    </ruby>
+                  ) : <span key={i}>{s.text}</span>
+                ))
+              : preview}
           </div>
         )}
         {processing && detail && (

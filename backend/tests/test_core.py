@@ -646,6 +646,20 @@ class TestTextReplacements:
         from backend.utils.text import apply_text_replacements
         assert apply_text_replacements("leave me alone", []) == "leave me alone"
 
+    def test_segments_mark_the_swap(self):
+        from backend.utils.text import replacement_segments
+        segs = replacement_segments("I'm gonna leave", self._rules([("gonna", "going to")]))
+        assert segs == [
+            {"text": "I'm "},
+            {"text": "going to", "original": "gonna"},
+            {"text": " leave"},
+        ]
+
+    def test_segments_no_match(self):
+        from backend.utils.text import replacement_segments
+        segs = replacement_segments("nothing here", self._rules([("gonna", "going to")]))
+        assert segs == [{"text": "nothing here"}]   # one plain run, no annotations
+
 
 # ---------------------------------------------------- per-window sentence layout
 class TestSentenceLayout:

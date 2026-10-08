@@ -174,6 +174,42 @@ def apply_text_replacements(text: str, rules: list) -> str:
     return re.sub(r"[^\S\r\n]{2,}", " ", text).strip()
 
 
+def replacement_segments(text: str, rules: list) -> list:
+    """Split `text` into segments for the live preview: plain runs `{text}` plus
+    replaced runs `{text: result, original: spoken}` wherever a rule fires — so the
+    pill can show the result inline with the word you actually said annotated above
+    it. Mirrors apply_text_replacements' matching (whole-word, case-insensitive,
+    caps preserved, longer rules win)."""
+    spans: list[tuple[int, int, str, str]] = []   # (start, end, original, result)
+    taken = [False] * len(text)
+    for rule in sorted(rules, key=lambda r: len(getattr(r, "match", "") or ""), reverse=True):
+        match = (getattr(rule, "match", "") or "").strip()
+        if not match:
+            continue
+        replace = getattr(rule, "replace", "") or ""
+        pattern = re.compile(r"(?<![\w'])" + re.escape(match) + r"(?![\w'])", re.IGNORECASE)
+        for m in pattern.finditer(text):
+            s, e = m.start(), m.end()
+            if any(taken[s:e]):
+                continue   # overlaps a longer rule already claimed
+            orig = m.group(0)
+            res = replace[0].upper() + replace[1:] if replace and orig[:1].isupper() else replace
+            spans.append((s, e, orig, res))
+            for i in range(s, e):
+                taken[i] = True
+    spans.sort()
+    segs: list[dict] = []
+    pos = 0
+    for s, e, orig, res in spans:
+        if s > pos:
+            segs.append({"text": text[pos:s]})
+        segs.append({"text": res, "original": orig})
+        pos = e
+    if pos < len(text):
+        segs.append({"text": text[pos:]})
+    return segs
+
+
 def sentences_on_separate_lines(text: str, blank_line: bool = True) -> str:
     """Put each sentence on its own line. With `blank_line` (default) an empty
     line separates each; otherwise the sentences sit on consecutive lines."""

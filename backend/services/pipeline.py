@@ -28,7 +28,7 @@ from backend.utils import encryption
 from backend.utils.logger import get_logger
 from backend.utils import usage
 from backend.utils.text import (apply_text_replacements, apply_vocabulary_casing,
-                                 build_vocabulary_prompt,
+                                 build_vocabulary_prompt, replacement_segments,
                                  fix_numeral_idioms, fix_ordinal_idioms,
                                  remove_filler_words, spoken_fractions_to_words,
                                  strip_time_leading_zero,
@@ -54,6 +54,7 @@ class DictationPipeline:
         self._test_mode = False
         self._live_session = None              # active live-streaming session (Deepgram/Grok), if any
         self._last_partial = ""                # last live-preview text sent to overlay
+        self._text_replacements: list = []     # cached per dictation, for the live preview
         self._clip_inserts: list[str] = []     # clipboard inserts (batch-engine fallback)
         # Persistent loop: keeps provider HTTP connection pools warm between
         # dictations (asyncio.run would tear them down every time).
@@ -138,6 +139,7 @@ class DictationPipeline:
             return
         self._clip_inserts = []                 # fresh per dictation
         cfg = load_settings()
+        self._text_replacements = cfg.formatting.text_replacements   # for the live preview
         # rdp_session lets the overlay honor the "Remote Desktop compatibility"
         # toggle live; engine lets the pill show which model is transcribing (and
         # update it live if a fallback kicks in).
@@ -179,6 +181,14 @@ class DictationPipeline:
         if text == self._last_partial:
             return
         self._last_partial = text
+        # Show text replacements live: the result flows inline and the overlay
+        # annotates the word you actually said above the swapped text.
+        if self._text_replacements:
+            segs = replacement_segments(text, self._text_replacements)
+            if any("original" in s for s in segs):
+                bus.publish("partial", {"text": "".join(s["text"] for s in segs),
+                                        "segments": segs})
+                return
         bus.publish("partial", {"text": text})
 
     def _finish_live(self) -> str | None:

@@ -3,6 +3,14 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.78] — 2026-10-07
+
+### Added
+- **Text replacements show live in the pill.** When a replacement fires (e.g.
+  "gonna" → "going to"), the recording pill's live preview now shows the result
+  inline with the word you actually said highlighted just above it — so you can see
+  the swap happening as you speak.
+
 ## [1.0.77] — 2026-10-07
 
 ### Added

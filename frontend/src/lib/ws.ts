@@ -17,6 +17,7 @@ export interface WTEvent {
   seconds?: number;
   model?: string;
   text?: string;
+  segments?: { text: string; original?: string }[];
   language?: string;
   [key: string]: unknown;
 }
