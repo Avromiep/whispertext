@@ -118,6 +118,8 @@ export interface WTBridge {
   installUpdate(): void;
   exportVocabulary(words: string[]): Promise<{ ok: boolean; path?: string; error?: string }>;
   importVocabulary(): Promise<{ ok?: boolean; canceled?: boolean; text?: string; path?: string; error?: string }>;
+  exportBackup(data: unknown): Promise<{ ok: boolean; path?: string; error?: string }>;
+  importBackup(): Promise<{ ok?: boolean; canceled?: boolean; text?: string; path?: string; error?: string }>;
   onNavigate(cb: (page: string) => void): void;
   onUpdateState(cb: (state: UpdateState) => void): void;
 }

@@ -10,6 +10,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
   "gonna" → "going to"), the recording pill's live preview now shows the result
   inline with the word you actually said highlighted just above it — so you can see
   the swap happening as you speak.
+- **Backups now include text replacements, not just vocabulary.** Export writes a
+  single backup file with both your custom words and your text replacements, and
+  Import restores both — reachable from either the Vocabulary or Text Replacement
+  page. Older vocabulary‑only exports still import cleanly.
+
+### Changed
+- **Removing a text replacement now asks for confirmation** ("Are you sure you want
+  to remove…?") so a stray click can't quietly drop a rule.
 
 ## [1.0.77] — 2026-10-07
 

@@ -276,6 +276,41 @@ ipcMain.handle("vocabulary:import", async () => {
     return { ok: false, error: String(e && e.message ? e.message : e) };
   }
 });
+// Full settings backup (vocabulary + text replacements) as one JSON file.
+const BACKUP_DIR = "WhisperText Backup";              // under the user's Documents
+const BACKUP_FILENAME = "whispertext-backup.json";
+
+ipcMain.handle("backup:export", (_e, data) => {
+  try {
+    const dir = path.join(app.getPath("documents"), BACKUP_DIR);
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, BACKUP_FILENAME);
+    fs.writeFileSync(file, JSON.stringify(data ?? {}, null, 2), "utf8");
+    shell.showItemInFolder(file);
+    return { ok: true, path: file };
+  } catch (e) {
+    return { ok: false, error: String(e && e.message ? e.message : e) };
+  }
+});
+
+ipcMain.handle("backup:import", async () => {
+  let defaultPath = path.join(app.getPath("documents"), BACKUP_DIR);
+  try { if (!fs.existsSync(defaultPath)) defaultPath = app.getPath("documents"); }
+  catch { defaultPath = app.getPath("documents"); }
+  const parent = settingsWin && !settingsWin.isDestroyed() ? settingsWin : undefined;
+  const res = await dialog.showOpenDialog(parent, {
+    title: "Import backup",
+    defaultPath,
+    filters: [{ name: "Backup", extensions: ["json", "txt"] }, { name: "All files", extensions: ["*"] }],
+    properties: ["openFile"],
+  });
+  if (res.canceled || !res.filePaths[0]) return { canceled: true };
+  try {
+    return { ok: true, text: fs.readFileSync(res.filePaths[0], "utf8"), path: res.filePaths[0] };
+  } catch (e) {
+    return { ok: false, error: String(e && e.message ? e.message : e) };
+  }
+});
 // --------------------------------------------------------------------- updates
 // The whole flow lives in-app: check → download (progress streamed to the
 // renderer) → "ready" → silent install + relaunch. No browser hand-off.

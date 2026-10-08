@@ -238,6 +238,23 @@ async def export_vocabulary() -> StreamingResponse:
                                       "attachment; filename=whispertext-vocabulary.txt"})
 
 
+@router.get("/backup/export")
+async def export_backup() -> StreamingResponse:
+    """A full backup of the user's custom data — vocabulary and text
+    replacements — as one JSON file. Restored on the client. (In the Electron
+    app the backup is written directly to Documents; this is the browser-dev
+    fallback.)"""
+    s = load_settings()
+    payload = {
+        "vocabulary": s.vocabulary.words,
+        "text_replacements": [r.model_dump() for r in s.formatting.text_replacements],
+    }
+    body = json.dumps(payload, ensure_ascii=False, indent=2)
+    return StreamingResponse(iter([body]), media_type="application/json",
+                             headers={"Content-Disposition":
+                                      "attachment; filename=whispertext-backup.json"})
+
+
 # ------------------------------------------------------------- groq transcribe
 @router.post("/transcription/groq/validate")
 async def validate_groq() -> dict:
