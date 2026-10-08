@@ -240,14 +240,33 @@ async def export_vocabulary() -> StreamingResponse:
 
 @router.get("/backup/export")
 async def export_backup() -> StreamingResponse:
-    """A full backup of the user's custom data — vocabulary and text
-    replacements — as one JSON file. Restored on the client. (In the Electron
-    app the backup is written directly to Documents; this is the browser-dev
-    fallback.)"""
+    """A backup of the user's word data (vocabulary, text replacements, per-app
+    rules) and app preferences (hotkeys, engine & model, audio, formatting
+    toggles, theme…) as one JSON file. Restored on the client. (In the Electron
+    app the backup is written directly to Documents with the user's category
+    choices; this is the browser-dev fallback and includes both categories.)"""
     s = load_settings()
+    general_keys = ("theme", "launch_on_boot", "notifications", "auto_update",
+                    "debug_mode", "font_scale", "overlay_over_rdp")
+    formatting_keys = ("auto_capitalize", "auto_punctuate", "remove_fillers",
+                       "smart_paragraphs", "spoken_punctuation", "spoken_lists",
+                       "numbers_as_digits")
     payload = {
-        "vocabulary": s.vocabulary.words,
-        "text_replacements": [r.model_dump() for r in s.formatting.text_replacements],
+        "format": "whispertext-backup",
+        "version": 2,
+        "word_data": {
+            "vocabulary": s.vocabulary.words,
+            "text_replacements": [r.model_dump() for r in s.formatting.text_replacements],
+            "per_tab_rules": [r.model_dump() for r in s.formatting.per_tab_rules],
+        },
+        "preferences": {
+            "general": {k: getattr(s.general, k) for k in general_keys},
+            "hotkeys": s.hotkeys.model_dump(),
+            "audio": s.audio.model_dump(),
+            "whisper": s.whisper.model_dump(),
+            "typing": s.typing.model_dump(),
+            "formatting": {k: getattr(s.formatting, k) for k in formatting_keys},
+        },
     }
     body = json.dumps(payload, ensure_ascii=False, indent=2)
     return StreamingResponse(iter([body]), media_type="application/json",

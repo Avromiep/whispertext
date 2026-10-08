@@ -1,19 +1,14 @@
 /** Custom vocabulary: your own words that bias recognition and keep their casing. */
-import { useRef, useState } from "react";
-import { Download, Plus, Upload, X } from "lucide-react";
-import { API_BASE, bridge } from "../lib/api";
-import { buildBackup, parseBackup, mergeVocabulary, mergeReplacements } from "../lib/backup";
+import { useState } from "react";
+import { Archive, Plus, X } from "lucide-react";
+import type { PageId } from "../App";
 import { useSettings } from "../hooks/useSettings";
 import { Button, PageHeader, Section } from "../components/ui";
 
-export default function VocabularyPage() {
+export default function VocabularyPage({ go }: { go: (p: PageId) => void }) {
   const { settings, patch } = useSettings();
   const [input, setInput] = useState("");
   const [confirmWord, setConfirmWord] = useState<string | null>(null);
-  const [statusMsg, setStatusMsg] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  const flash = (msg: string) => { setStatusMsg(msg); setTimeout(() => setStatusMsg(""), 5000); };
 
   if (!settings) return null;
   const vocab = settings.vocabulary.words;
@@ -29,78 +24,16 @@ export default function VocabularyPage() {
   const removeWord = (w: string) =>
     patch({ vocabulary: { words: vocab.filter((x) => x !== w) } });
 
-  const applyImportedText = async (text: string) => {
-    const data = parseBackup(text);
-    const words = data.vocabulary;
-    const repl = data.text_replacements;
-    if (words.length === 0 && repl.length === 0) {
-      flash("No vocabulary or replacements found in that file."); return;
-    }
-    await patch({
-      vocabulary: { words: mergeVocabulary(vocab, words) },
-      formatting: { text_replacements: mergeReplacements(settings.formatting.text_replacements, repl) },
-    });
-    const parts: string[] = [];
-    if (words.length) parts.push(`${words.length} word${words.length === 1 ? "" : "s"}`);
-    if (repl.length) parts.push(`${repl.length} replacement${repl.length === 1 ? "" : "s"}`);
-    flash(`Imported ${parts.join(" and ")}.`);
-  };
-
-  // Save a full backup (vocabulary + text replacements) to the Documents folder
-  // and reveal it (Electron); in plain browser dev, fall back to the backend
-  // download endpoint.
-  const exportVocab = async () => {
-    if (bridge?.exportBackup) {
-      const res = await bridge.exportBackup(buildBackup(settings));
-      flash(res?.ok ? `Exported to ${res.path}` : "Couldn't export the backup.");
-    } else {
-      window.open(`${API_BASE}/backup/export`);
-    }
-  };
-
-  // Open a native picker starting in Documents (Electron); browser dev uses the
-  // hidden <input type=file> instead.
-  const importVocab = async () => {
-    if (bridge?.importBackup) {
-      const res = await bridge.importBackup();
-      if (res?.canceled) return;
-      if (res?.ok && typeof res.text === "string") await applyImportedText(res.text);
-      else flash("Couldn't read that file.");
-    } else {
-      fileRef.current?.click();
-    }
-  };
-
-  const onImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";                     // let the same file be re-imported
-    if (file) await applyImportedText(await file.text());
-  };
-
   return (
     <div className="animate-fade-in">
       <PageHeader title="Vocabulary"
         subtitle="Your own words, names, and jargon — recognized more reliably, and typed with the exact capitalization you enter."
         actions={
-          <div className="flex gap-2">
-            <input ref={fileRef} type="file" accept=".txt,.json,text/plain,application/json"
-              className="hidden" onChange={onImportFile} />
-            <Button size="sm" onClick={importVocab} title="Restore vocabulary and text replacements from a backup file">
-              <Upload size={13} /> Import
-            </Button>
-            <Button size="sm" onClick={exportVocab}
-              title="Back up your vocabulary and text replacements to a file"
-              disabled={vocab.length === 0 && settings.formatting.text_replacements.length === 0}>
-              <Download size={13} /> Export
-            </Button>
-          </div>
+          <Button size="sm" variant="ghost" onClick={() => go("backup")}
+            title="Back up or restore your vocabulary and more">
+            <Archive size={13} /> Import / Export
+          </Button>
         } />
-
-      {statusMsg && (
-        <div className="mb-4 text-xs text-muted bg-elevated border border-border rounded-xl px-3 py-2 animate-fade-in break-all">
-          {statusMsg}
-        </div>
-      )}
 
       <Section title="Your words"
         description="Add a term and press Enter. Whatever capitalization you type is how it'll be typed out — e.g. GitHub, OAuth, kubectl, iPhone.">

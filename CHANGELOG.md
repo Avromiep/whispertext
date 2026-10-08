@@ -3,6 +3,22 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.79] — 2026-10-08
+
+### Added
+- **Dedicated Import / Export page.** Backups now live in their own Settings
+  section instead of being tucked under Vocabulary. It's a pick-and-choose
+  backup: tick **Word data** (vocabulary, text replacements, per-app rules)
+  and/or **App preferences** (hotkeys & timing, chosen engine & model, audio,
+  formatting toggles, theme/font), and those same choices apply on import. AI
+  cleanup instructions, API keys, and history are never included.
+
+### Changed
+- The Vocabulary and Text Replacement pages now link to **Import / Export**
+  rather than carrying their own Export/Import buttons.
+- Backup files use a new structured format that carries both categories; older
+  vocabulary-only and 1.0.78 word-data backups still import cleanly.
+
 ## [1.0.78] — 2026-10-07
 
 ### Added

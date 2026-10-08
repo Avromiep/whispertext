@@ -1,66 +1,18 @@
 /** Text Replacement: user substitutions applied to the transcript, e.g. "gonna" -> "going to". */
-import { useRef, useState } from "react";
-import { ArrowRight, Download, Plus, Upload, X } from "lucide-react";
-import { API_BASE, bridge } from "../lib/api";
-import { buildBackup, parseBackup, mergeVocabulary, mergeReplacements } from "../lib/backup";
+import { useState } from "react";
+import { Archive, ArrowRight, Plus, X } from "lucide-react";
+import type { PageId } from "../App";
 import { useSettings } from "../hooks/useSettings";
 import { Button, PageHeader, Section } from "../components/ui";
 
-export default function TextReplacementPage() {
+export default function TextReplacementPage({ go }: { go: (p: PageId) => void }) {
   const { settings, patch } = useSettings();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [confirmMatch, setConfirmMatch] = useState<string | null>(null);
-  const [statusMsg, setStatusMsg] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  const flash = (msg: string) => { setStatusMsg(msg); setTimeout(() => setStatusMsg(""), 5000); };
 
   if (!settings) return null;
   const rules = settings.formatting.text_replacements;
-
-  // Export/import a full backup (vocabulary + text replacements) — the same
-  // backup the Vocabulary page produces, reachable from here too.
-  const applyImportedText = async (text: string) => {
-    const data = parseBackup(text);
-    if (data.vocabulary.length === 0 && data.text_replacements.length === 0) {
-      flash("No vocabulary or replacements found in that file."); return;
-    }
-    await patch({
-      vocabulary: { words: mergeVocabulary(settings.vocabulary.words, data.vocabulary) },
-      formatting: { text_replacements: mergeReplacements(rules, data.text_replacements) },
-    });
-    const parts: string[] = [];
-    if (data.vocabulary.length) parts.push(`${data.vocabulary.length} word${data.vocabulary.length === 1 ? "" : "s"}`);
-    if (data.text_replacements.length) parts.push(`${data.text_replacements.length} replacement${data.text_replacements.length === 1 ? "" : "s"}`);
-    flash(`Imported ${parts.join(" and ")}.`);
-  };
-
-  const exportBackup = async () => {
-    if (bridge?.exportBackup) {
-      const res = await bridge.exportBackup(buildBackup(settings));
-      flash(res?.ok ? `Exported to ${res.path}` : "Couldn't export the backup.");
-    } else {
-      window.open(`${API_BASE}/backup/export`);
-    }
-  };
-
-  const importBackup = async () => {
-    if (bridge?.importBackup) {
-      const res = await bridge.importBackup();
-      if (res?.canceled) return;
-      if (res?.ok && typeof res.text === "string") await applyImportedText(res.text);
-      else flash("Couldn't read that file.");
-    } else {
-      fileRef.current?.click();
-    }
-  };
-
-  const onImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (file) await applyImportedText(await file.text());
-  };
 
   const add = () => {
     const match = from.trim();
@@ -81,25 +33,11 @@ export default function TextReplacementPage() {
       <PageHeader title="Text Replacement"
         subtitle="Automatically swap a word or phrase for another as you dictate — say the left, get the right. Matching ignores case and keeps your capitalization (so “Gonna” at a sentence start becomes “Going to”)."
         actions={
-          <div className="flex gap-2">
-            <input ref={fileRef} type="file" accept=".txt,.json,text/plain,application/json"
-              className="hidden" onChange={onImportFile} />
-            <Button size="sm" onClick={importBackup} title="Restore vocabulary and text replacements from a backup file">
-              <Upload size={13} /> Import
-            </Button>
-            <Button size="sm" onClick={exportBackup}
-              title="Back up your vocabulary and text replacements to a file"
-              disabled={rules.length === 0 && settings.vocabulary.words.length === 0}>
-              <Download size={13} /> Export
-            </Button>
-          </div>
+          <Button size="sm" variant="ghost" onClick={() => go("backup")}
+            title="Back up or restore your replacements and more">
+            <Archive size={13} /> Import / Export
+          </Button>
         } />
-
-      {statusMsg && (
-        <div className="mb-4 text-xs text-muted bg-elevated border border-border rounded-xl px-3 py-2 animate-fade-in break-all">
-          {statusMsg}
-        </div>
-      )}
 
       <Section title="Replacements"
         description="For example: “gonna” → “going to”, “omw” → “on my way”, “teh” → “the”. Matches whole words only; leave the right side blank to simply delete the word.">

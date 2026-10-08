@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Home, Mic, BookOpen, Replace, Sparkles, Volume2, Keyboard, HistoryIcon, Package, Wrench, Info,
+  Archive,
 } from "lucide-react";
 import { SettingsContext, useSettingsProvider } from "./hooks/useSettings";
 import { useBackendEvents, WTEvent } from "./lib/ws";
@@ -17,11 +18,12 @@ import HotkeysPage from "./pages/HotkeysPage";
 import HistoryPage from "./pages/HistoryPage";
 import ModelsPage from "./pages/ModelsPage";
 import AdvancedPage from "./pages/AdvancedPage";
+import ImportExportPage from "./pages/ImportExportPage";
 import AboutPage from "./pages/AboutPage";
 
 export type PageId =
   | "home" | "dictation" | "vocabulary" | "replacements" | "ai" | "audio" | "hotkeys"
-  | "history" | "models" | "advanced" | "about";
+  | "history" | "models" | "advanced" | "backup" | "about";
 
 const NAV: { id: PageId; label: string; icon: typeof Home }[] = [
   { id: "home", label: "Home", icon: Home },
@@ -34,6 +36,7 @@ const NAV: { id: PageId; label: string; icon: typeof Home }[] = [
   { id: "history", label: "History", icon: HistoryIcon },
   { id: "models", label: "Models", icon: Package },
   { id: "advanced", label: "Advanced", icon: Wrench },
+  { id: "backup", label: "Import / Export", icon: Archive },
   { id: "about", label: "About", icon: Info },
 ];
 
@@ -151,14 +154,15 @@ export default function App() {
           <div className="max-w-3xl mx-auto px-8 py-8" key={page}>
             {page === "home" && <HomePage go={setPage} />}
             {page === "dictation" && <DictationPage />}
-            {page === "vocabulary" && <VocabularyPage />}
-            {page === "replacements" && <TextReplacementPage />}
+            {page === "vocabulary" && <VocabularyPage go={setPage} />}
+            {page === "replacements" && <TextReplacementPage go={setPage} />}
             {page === "ai" && <AIPage />}
             {page === "audio" && <AudioPage />}
             {page === "hotkeys" && <HotkeysPage />}
             {page === "history" && <HistoryPage />}
             {page === "models" && <ModelsPage />}
             {page === "advanced" && <AdvancedPage />}
+            {page === "backup" && <ImportExportPage />}
             {page === "about" && <AboutPage />}
           </div>
         </main>
