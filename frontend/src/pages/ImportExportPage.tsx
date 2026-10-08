@@ -2,9 +2,13 @@
  *  categories — word data (vocabulary, text replacements, per-app rules) and app
  *  preferences (hotkeys, engine & model, audio, formatting toggles, theme) —
  *  that you tick per export/import. AI instructions, API keys and history are
- *  intentionally left out. */
+ *  intentionally left out.
+ *
+ *  The backup folder is chosen once (on the first export) and remembered in
+ *  settings (general.backup_dir); after that exports write silently with no
+ *  dialog and no folder popping open. "Open folder" reveals where they are. */
 import { useRef, useState } from "react";
-import { Download, Upload } from "lucide-react";
+import { Download, FolderOpen, Upload } from "lucide-react";
 import { API_BASE, bridge } from "../lib/api";
 import {
   buildBackup, parseBackup, mergeVocabulary, mergeReplacements, mergePerTabRules,
@@ -29,15 +33,40 @@ export default function ImportExportPage() {
   const nRules = settings.formatting.per_tab_rules.length;
   const sel: BackupSelection = { wordData: includeWords, preferences: includePrefs };
   const nothingChosen = !includeWords && !includePrefs;
+  const backupDir = settings.general.backup_dir;
+
+  // Pick the backup folder (first export, or an explicit "Change folder"); the
+  // choice is saved to settings so it's never asked again. Returns the folder
+  // to use, or null if the user canceled.
+  const ensureBackupDir = async (forcePick = false): Promise<string | null> => {
+    if (!forcePick && backupDir) return backupDir;
+    const chosen = await bridge?.chooseBackupDir?.();
+    if (!chosen?.ok || !chosen.path) return null;      // canceled
+    await patch({ general: { backup_dir: chosen.path } });
+    return chosen.path;
+  };
 
   const exportBackup = async () => {
     if (nothingChosen) return;
-    if (bridge?.exportBackup) {
-      const res = await bridge.exportBackup(buildBackup(settings, sel));
-      flash(res?.ok ? `Exported to ${res.path}` : "Couldn't export the backup.");
-    } else {
-      window.open(`${API_BASE}/backup/export`);   // browser-dev fallback (both categories)
+    if (!bridge?.exportBackup) {
+      window.open(`${API_BASE}/backup/export`);        // browser-dev fallback (both categories)
+      return;
     }
+    const dir = await ensureBackupDir();
+    if (!dir) return;                                  // user canceled the first-time picker
+    const res = await bridge.exportBackup(buildBackup(settings, sel), dir);
+    flash(res?.ok ? `Backup exported to ${res.path}` : `Couldn't export: ${res?.error ?? "unknown error"}`);
+  };
+
+  const changeFolder = async () => {
+    const dir = await ensureBackupDir(true);
+    if (dir) flash(`Backups will now be saved to ${dir}`);
+  };
+
+  const openFolder = async () => {
+    if (!backupDir) { flash("No backups yet — export one first to choose a folder."); return; }
+    const res = await bridge?.openBackupDir?.(backupDir);
+    if (res && !res.ok) flash(res.error ?? "Couldn't open the folder.");
   };
 
   const applyImportedText = async (text: string) => {
@@ -49,12 +78,11 @@ export default function ImportExportPage() {
     const hasWords = data.vocabulary.length || data.text_replacements.length || data.per_tab_rules.length;
     if (hasWords) {
       if (includeWords) {
-        const formatting: Record<string, unknown> = {
+        patchObj.vocabulary = { words: mergeVocabulary(settings.vocabulary.words, data.vocabulary) };
+        patchObj.formatting = {
           text_replacements: mergeReplacements(settings.formatting.text_replacements, data.text_replacements),
           per_tab_rules: mergePerTabRules(settings.formatting.per_tab_rules, data.per_tab_rules),
         };
-        patchObj.vocabulary = { words: mergeVocabulary(settings.vocabulary.words, data.vocabulary) };
-        patchObj.formatting = formatting;
         if (data.vocabulary.length) applied.push(`${data.vocabulary.length} word${data.vocabulary.length === 1 ? "" : "s"}`);
         if (data.text_replacements.length) applied.push(`${data.text_replacements.length} replacement${data.text_replacements.length === 1 ? "" : "s"}`);
         if (data.per_tab_rules.length) applied.push(`${data.per_tab_rules.length} per-app rule${data.per_tab_rules.length === 1 ? "" : "s"}`);
@@ -134,8 +162,8 @@ export default function ImportExportPage() {
       </Section>
 
       <Section title="Back up or restore"
-        description="Export writes one file to your Documents\WhisperText Backup folder. Import merges a backup into your current setup — your existing words and rules are kept, and anything matching is updated.">
-        <div className="flex gap-2">
+        description="Import merges a backup into your current setup — your existing words and rules are kept, and anything matching is updated.">
+        <div className="flex flex-wrap gap-2">
           <input ref={fileRef} type="file" accept=".json,.txt,application/json,text/plain"
             className="hidden" onChange={onImportFile} />
           <Button onClick={exportBackup} disabled={nothingChosen} variant="primary">
@@ -144,10 +172,25 @@ export default function ImportExportPage() {
           <Button onClick={importBackup}>
             <Upload size={14} /> Import backup
           </Button>
+          <Button onClick={openFolder} variant="ghost" disabled={!backupDir}>
+            <FolderOpen size={14} /> Open folder
+          </Button>
         </div>
+
         {nothingChosen && (
           <p className="text-xs text-muted mt-3">Turn on at least one category above to export.</p>
         )}
+
+        <div className="text-xs text-muted mt-4 break-all">
+          {backupDir ? (
+            <>
+              Backups are saved to <span className="text-fg">{backupDir}</span>.{" "}
+              <button onClick={changeFolder} className="text-accent hover:underline">Change folder…</button>
+            </>
+          ) : (
+            <>You'll choose a folder the first time you export. After that, exports save there automatically.</>
+          )}
+        </div>
       </Section>
     </div>
   );

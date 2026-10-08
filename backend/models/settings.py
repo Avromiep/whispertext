@@ -192,6 +192,10 @@ class GeneralSettings(BaseModel):
     onboarding_complete: bool = False
     font_scale: float = 1.0
     overlay_over_rdp: bool = True   # force the recording pill above a full-screen RDP window
+    # Folder the user picked for Import/Export backups (chosen once, on first
+    # export, then reused silently). Empty = not chosen yet. Per-machine: left
+    # out of exported "app preferences" so a backup never carries a stale path.
+    backup_dir: str = ""
 
 
 class Settings(BaseModel):

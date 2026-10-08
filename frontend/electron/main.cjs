@@ -276,18 +276,50 @@ ipcMain.handle("vocabulary:import", async () => {
     return { ok: false, error: String(e && e.message ? e.message : e) };
   }
 });
-// Full settings backup (vocabulary + text replacements) as one JSON file.
-const BACKUP_DIR = "WhisperText Backup";              // under the user's Documents
+// Full settings backup (word data + preferences) as one JSON file. The folder
+// is chosen by the user on their first export and remembered thereafter
+// (general.backup_dir in settings), so exports after that write silently with
+// no dialog and no folder popping open — the page has an "Open folder" button.
+const BACKUP_DIR = "WhisperText Backup";              // default picker location
 const BACKUP_FILENAME = "whispertext-backup.json";
 
-ipcMain.handle("backup:export", (_e, data) => {
+// Ask the user where backups should live (first export, or "change folder").
+ipcMain.handle("backup:choose-dir", async () => {
+  let defaultPath = path.join(app.getPath("documents"), BACKUP_DIR);
+  try { if (!fs.existsSync(defaultPath)) defaultPath = app.getPath("documents"); }
+  catch { defaultPath = app.getPath("documents"); }
+  const parent = settingsWin && !settingsWin.isDestroyed() ? settingsWin : undefined;
+  const res = await dialog.showOpenDialog(parent, {
+    title: "Choose where to save WhisperText backups",
+    defaultPath,
+    buttonLabel: "Save backups here",
+    properties: ["openDirectory", "createDirectory"],
+  });
+  if (res.canceled || !res.filePaths[0]) return { canceled: true };
+  return { ok: true, path: res.filePaths[0] };
+});
+
+// Write the backup to a known folder — no dialog, no reveal.
+ipcMain.handle("backup:export", (_e, args) => {
+  const { data, dir } = args ?? {};
+  if (!dir || typeof dir !== "string") return { ok: false, error: "No backup folder chosen." };
   try {
-    const dir = path.join(app.getPath("documents"), BACKUP_DIR);
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, BACKUP_FILENAME);
     fs.writeFileSync(file, JSON.stringify(data ?? {}, null, 2), "utf8");
-    shell.showItemInFolder(file);
     return { ok: true, path: file };
+  } catch (e) {
+    return { ok: false, error: String(e && e.message ? e.message : e) };
+  }
+});
+
+// Open the backup folder in the file manager (the "Open folder" button).
+ipcMain.handle("backup:open-dir", async (_e, dir) => {
+  if (!dir || typeof dir !== "string") return { ok: false, error: "No backup folder yet." };
+  try {
+    if (!fs.existsSync(dir)) return { ok: false, error: "That folder no longer exists." };
+    const err = await shell.openPath(dir);          // "" on success
+    return err ? { ok: false, error: err } : { ok: true };
   } catch (e) {
     return { ok: false, error: String(e && e.message ? e.message : e) };
   }

@@ -3,6 +3,15 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.80] — 2026-10-08
+
+### Changed
+- **Export no longer pops open a folder every time.** The first time you export,
+  WhisperText asks you to choose a backup folder and remembers it; after that,
+  exports save there silently and just tell you "Backup exported to …". A new
+  **Open folder** button reveals where your backups are, and the page shows the
+  current location with a **Change folder…** link.
+
 ## [1.0.79] — 2026-10-08
 
 ### Added

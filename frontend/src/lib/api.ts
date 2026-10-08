@@ -40,7 +40,7 @@ export interface PerTabRule { match: string; blank_line: boolean }
 export interface TextReplacement { match: string; replace: string }
 
 export interface Settings {
-  general: { theme: "dark" | "light" | "system"; launch_on_boot: boolean; notifications: boolean; telemetry: boolean; auto_update: boolean; debug_mode: boolean; onboarding_complete: boolean; font_scale: number; overlay_over_rdp: boolean };
+  general: { theme: "dark" | "light" | "system"; launch_on_boot: boolean; notifications: boolean; telemetry: boolean; auto_update: boolean; debug_mode: boolean; onboarding_complete: boolean; font_scale: number; overlay_over_rdp: boolean; backup_dir: string };
   hotkeys: { push_to_talk: string; toggle_key: string; double_tap_window_ms: number; open_settings: string; clipboard_insert_key: string; release_grace_ms: number; hands_free_enabled: boolean; hands_free_auto_stop: boolean; hands_free_silence_ms: number };
   audio: { input_device: number | null; sample_rate: number; noise_suppression: boolean; auto_gain: boolean; silence_trimming: boolean; vad_enabled: boolean; keep_mic_warm: boolean };
   whisper: { model: string; language: string; compute_device: string; beam_size: number; engine: "local" | "groq" | "deepgram" | "grok"; groq_model: string; deepgram_model: string; grok_model: string; grok_isolate_speaker: boolean };
@@ -118,7 +118,9 @@ export interface WTBridge {
   installUpdate(): void;
   exportVocabulary(words: string[]): Promise<{ ok: boolean; path?: string; error?: string }>;
   importVocabulary(): Promise<{ ok?: boolean; canceled?: boolean; text?: string; path?: string; error?: string }>;
-  exportBackup(data: unknown): Promise<{ ok: boolean; path?: string; error?: string }>;
+  chooseBackupDir(): Promise<{ ok?: boolean; canceled?: boolean; path?: string }>;
+  exportBackup(data: unknown, dir: string): Promise<{ ok: boolean; path?: string; error?: string }>;
+  openBackupDir(dir: string): Promise<{ ok: boolean; error?: string }>;
   importBackup(): Promise<{ ok?: boolean; canceled?: boolean; text?: string; path?: string; error?: string }>;
   onNavigate(cb: (page: string) => void): void;
   onUpdateState(cb: (state: UpdateState) => void): void;
