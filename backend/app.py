@@ -65,6 +65,7 @@ async def lifespan(app: FastAPI):
     hotkey_service.on_ptt_stop = pipeline.ptt_stop
     hotkey_service.on_toggle = pipeline.toggle
     hotkey_service.on_clipboard_insert = pipeline.clipboard_insert
+    hotkey_service.on_ptt_prewarm = pipeline.ptt_prewarm
     hotkey_service.start()
 
     # Background warm-up + history retention (non-blocking).

@@ -98,6 +98,10 @@ class HotkeyService:
         self.on_ptt_stop: Callable[[], None] = lambda: None
         self.on_toggle: Callable[[], None] = lambda: None
         self.on_clipboard_insert: Callable[[], None] = lambda: None
+        # Fired the instant the push-to-talk chord is held (before the commit
+        # window), so the mic can start opening before the user speaks — the fix
+        # for a cold device open clipping the first words.
+        self.on_ptt_prewarm: Callable[[], None] = lambda: None
         self._down: set[str] = set()
         self._ptt_active = False
         self._insert_held = False             # insert key down (debounce OS key-repeat)
@@ -245,6 +249,10 @@ class HotkeyService:
                     self._ptt_timer = threading.Timer(_PTT_CHORD_WINDOW_S, self._ptt_commit)
                     self._ptt_timer.daemon = True
                     self._ptt_timer.start()
+                    # Open the mic now (off the hook thread) so a cold device open
+                    # happens before speech, not during it. If the chord turns out
+                    # to be a bigger shortcut, the stream just idle-closes later.
+                    self._dispatch(self.on_ptt_prewarm)
                 elif self._ptt_pending and name not in combo:
                     self._cancel_pending_ptt()   # extra key -> a chord, not dictation
                 # The clipboard-insert key (e.g. N) is handled by a dedicated

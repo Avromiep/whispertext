@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import deque
 
 import numpy as np
 import sounddevice as sd
@@ -24,6 +25,14 @@ MAX_RECORD_SECONDS = 600  # hard safety cap for hands-free mode
 # only released after this much idle, balancing instant starts against not
 # holding the microphone open forever.
 WARM_IDLE_S = 180.0
+
+# Pre-roll: while the stream is warm but idle, keep a short rolling buffer of the
+# most recent audio. When recording starts it's prepended, so words spoken in the
+# gap between pressing the hotkey and capture actually beginning (the push-to-talk
+# debounce, and especially a cold device open) are included instead of clipped.
+# Blocks are 30 ms regardless of sample rate, so this is a fixed block count.
+PREROLL_SECONDS = 1.2
+_PREROLL_BLOCKS = int(PREROLL_SECONDS / 0.03) + 2
 
 # If a recording captured much less audio than the key was held for, the mic
 # dropped frames or stopped delivering mid-recording — the dictation is likely
@@ -131,11 +140,32 @@ class AudioService:
         self._chunk_sink = None           # optional callable(bytes) fed each block (live streaming)
         self._stream_device = None        # device the warm stream was opened for
         self._idle_timer: threading.Timer | None = None
+        # Rolling pre-roll of recent blocks captured while warm-but-idle, so the
+        # start of a dictation isn't clipped (see PREROLL_SECONDS).
+        self._preroll: deque[np.ndarray] = deque(maxlen=_PREROLL_BLOCKS)
 
     def set_chunk_sink(self, sink) -> None:
         """Register a callable to receive each captured block as raw linear16
-        bytes (used to stream to Deepgram live). Pass None to detach."""
-        self._chunk_sink = sink
+        bytes (used to stream to Deepgram/Grok live). Pass None to detach.
+
+        On attach, the audio already captured for this dictation — the prepended
+        pre-roll plus anything grabbed before the live session was wired up — is
+        flushed to the sink as one backlog chunk, so the live engine transcribes
+        the onset instead of missing it."""
+        if sink is None:
+            self._chunk_sink = None
+            return
+        # Snapshot the backlog, then arm the sink, so ongoing blocks the callback
+        # delivers aren't also in the backlog (at worst one 30 ms block is skipped,
+        # never doubled).
+        with self._lock:
+            backlog = [c for c in self._chunks] if self._chunks else []
+            self._chunk_sink = sink
+        if backlog:
+            try:
+                sink(b"".join(c.tobytes() for c in backlog))
+            except Exception:
+                pass
 
     @staticmethod
     def _native_rate(device) -> int | None:
@@ -227,6 +257,10 @@ class AudioService:
         """Persistent stream callback. The stream stays open (warm) between
         dictations, so blocks are ignored unless we're actively capturing."""
         if not self._recording:
+            # Keep a short rolling pre-roll so the first words aren't lost to the
+            # start-up gap (debounce + a cold device open). Cheap: just append;
+            # the deque's maxlen evicts the oldest block automatically.
+            self._preroll.append(indata.copy())
             return
         if status:
             # input_overflow = frames were lost because we couldn't keep up;
@@ -314,12 +348,16 @@ class AudioService:
             self._cancel_idle_timer_locked()
             s = load_settings().audio
             self._ensure_stream_locked(s)
-            self._chunks = []
+            # Prepend the pre-roll so speech in the start-up gap isn't clipped.
+            # Empty on a cold open (no blocks captured yet) — prewarm() on hotkey
+            # key-down exists to fill it before you speak in that case.
+            self._chunks = list(self._preroll)
+            preroll_blocks = len(self._chunks)
             self._overflows = 0
             self._started_at = time.monotonic()
             self._recording = True
-        log.info("Recording started (device=%s, capture=%d Hz -> %d Hz)",
-                 s.input_device, self._capture_rate, s.sample_rate)
+        log.info("Recording started (device=%s, capture=%d Hz -> %d Hz, pre-roll %d blocks)",
+                 s.input_device, self._capture_rate, s.sample_rate, preroll_blocks)
 
     # ------------------------------------------------------- warm-stream mgmt
     def _close_stream_locked(self) -> None:
@@ -332,6 +370,30 @@ class AudioService:
             finally:
                 self._stream = None
                 self._stream_device = None
+        # Drop pre-roll captured at the old stream's rate/device; the next open
+        # refills it cleanly.
+        self._preroll.clear()
+
+    def prewarm(self) -> None:
+        """Open the capture device ahead of recording — called on push-to-talk
+        key-down — so a cold open's 0.2-1.3s latency is paid before you speak
+        (while the pre-roll fills) rather than clipping your first words. No-op if
+        already recording or warm. Safe to call from a background thread; it can
+        block on a cold open, so never call it on the hotkey hook thread."""
+        with self._lock:
+            if self._recording:
+                return
+            already_warm = (self._stream is not None and self._stream.active)
+            try:
+                self._ensure_stream_locked(load_settings().audio)
+            except Exception as exc:
+                log.debug("Mic prewarm skipped (will open on record): %s", exc)
+                return
+            # If recording doesn't follow, release the mic after the usual idle;
+            # start() cancels this timer when a dictation begins.
+            self._schedule_idle_close_locked()
+        if not already_warm:
+            log.debug("Mic prewarmed on hotkey key-down")
 
     def _reinit_audio_locked(self) -> None:
         """Drop the stream and reinitialize PortAudio. After a sleep/resume the

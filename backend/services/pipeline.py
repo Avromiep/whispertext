@@ -66,6 +66,15 @@ class DictationPipeline:
         return asyncio.run_coroutine_threadsafe(coro, self._loop).result(timeout_s)
 
     # ----------------------------------------------------------------- controls
+    def ptt_prewarm(self) -> None:
+        """Hold-to-talk chord detected (before the commit window): open the mic
+        now so a cold device open doesn't clip the first words. No-op if already
+        recording. Runs on a worker thread, so a slow cold open can't stall the
+        hotkey hook."""
+        if audio_service.is_recording:
+            return
+        audio_service.prewarm()
+
     def ptt_start(self) -> None:
         """Hold-to-talk pressed."""
         with self._state_lock:

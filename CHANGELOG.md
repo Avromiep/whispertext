@@ -3,6 +3,20 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.81] — 2026-10-08
+
+### Fixed
+- **The first word or two is no longer clipped when you press the hotkey and
+  speak right away.** The microphone now keeps a short rolling "pre-roll" of the
+  most recent audio while it's warm, and that pre-roll is prepended when a
+  dictation starts — so speech in the gap between pressing and capture beginning
+  is included instead of lost. The mic also starts opening the instant the
+  push-to-talk chord is held (before recording formally begins), so a cold
+  device open (0.2–1.3 s, and slower over Remote Desktop) happens *before* you
+  speak rather than swallowing your opening words. This was most noticeable when
+  dictating after a pause, because the warm mic is released after a few minutes
+  idle and the next start was a cold open.
+
 ## [1.0.80] — 2026-10-08
 
 ### Changed
