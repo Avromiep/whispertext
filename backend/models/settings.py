@@ -51,9 +51,11 @@ class AudioSettings(BaseModel):
     auto_gain: bool = True
     silence_trimming: bool = True
     vad_enabled: bool = False
-    # Keep the mic stream open between dictations so recording starts instantly
-    # (opening a cold device costs 0.2-1.3s, which clips the first words). The
-    # stream auto-releases after a short idle. Turn off to open on demand.
+    # Keep the capture stream open continuously so recording starts instantly and
+    # never clips the first words (a background keep-alive reopens it if the mic's
+    # driver lets an idle stream die). The mic indicator stays on while the app
+    # runs. Turn off to open the mic on demand instead — cheaper, but the first
+    # word or two can be clipped by the cold-open latency (0.2-1.3s).
     keep_mic_warm: bool = True
 
 

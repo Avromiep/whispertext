@@ -887,14 +887,18 @@ class TestWarmStreamSelfHeal:
         svc._chunks = [sig]                                           # real signal
         svc._started_at = time.monotonic() - 3
         svc.stop()
-        assert calls["idle"] == 1 and calls["reinit"] == 0           # kept warm
+        # keep_mic_warm: the stream is left open (the keep-alive watchdog holds it
+        # warm), so stop() neither closes nor schedules an idle close.
+        assert calls == {"close": 0, "idle": 0, "reinit": 0}
 
     def test_brief_silent_tap_not_treated_as_dead(self, monkeypatch):
         svc, calls = self._svc(monkeypatch)
         svc._chunks = [np.zeros((int(0.2 * self.RATE), 1), dtype=np.int16)]  # 0.2s
         svc._started_at = time.monotonic() - 0.2
         svc.stop()
-        assert calls["reinit"] == 0 and calls["idle"] == 1          # too short to judge
+        # Too short to judge as dead; keep_mic_warm leaves the stream open (no
+        # reinit, no close).
+        assert calls["reinit"] == 0 and calls["close"] == 0
 
 
 class TestMicOpenRecovery:

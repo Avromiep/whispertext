@@ -21,15 +21,17 @@ log = get_logger(__name__)
 MAX_RECORD_SECONDS = 600  # hard safety cap for hands-free mode
 
 # Opening a cold capture device costs 0.2-1.3s on some machines, which clips the
-# start of a dictation. So the stream is kept open (warm) between recordings and
-# only released after this much idle, balancing instant starts against not
-# holding the microphone open forever.
-WARM_IDLE_S = 180.0
+# start of a dictation. With keep_mic_warm on, the capture stream is held open
+# CONTINUOUSLY (see start_keepalive): a background watchdog reopens it the moment
+# it goes inactive — some mics/drivers silently kill an idle stream within
+# seconds — so a dictation never pays a cold open and never loses its first
+# words. The watchdog checks this often:
+KEEPALIVE_INTERVAL_S = 2.0
 
-# After a prewarm that opened a COLD stream on hotkey key-down, release the mic
-# this soon if no dictation actually started — so a non-dictation chord that
-# starts with the push-to-talk keys (e.g. Win+Shift+S for the snipping tool)
-# doesn't leave the microphone open for the full warm idle. A real dictation
+# With keep_mic_warm OFF the mic opens on demand. A prewarm (hotkey key-down)
+# that opened a cold stream then releases it this soon if no dictation follows —
+# so a non-dictation chord that begins with the push-to-talk keys (e.g.
+# Win+Shift+S for the snipping tool) doesn't leave the mic open. A real dictation
 # starts within ~60ms, well inside this, and cancels the timer.
 PREWARM_IDLE_S = 5.0
 
@@ -147,6 +149,7 @@ class AudioService:
         self._chunk_sink = None           # optional callable(bytes) fed each block (live streaming)
         self._stream_device = None        # device the warm stream was opened for
         self._idle_timer: threading.Timer | None = None
+        self._keepalive_thread: threading.Thread | None = None
         # Rolling pre-roll of recent blocks captured while warm-but-idle, so the
         # start of a dictation isn't clipped (see PREROLL_SECONDS).
         self._preroll: deque[np.ndarray] = deque(maxlen=_PREROLL_BLOCKS)
@@ -396,16 +399,15 @@ class AudioService:
             except Exception as exc:
                 log.debug("Mic prewarm skipped (will open on record): %s", exc)
                 return
-            # If this prewarm opened a cold stream and no dictation follows (the
-            # chord was a non-dictation shortcut like Win+Shift+S), release the
-            # mic again quickly instead of holding it for the full warm idle.
-            # start() cancels this timer when a dictation begins; a stream that
-            # was already warm keeps its existing (longer) idle timer.
-            if not already_warm:
+            # When keep_mic_warm is OFF, a prewarm that opened a cold stream with
+            # no dictation following (the chord was a non-dictation shortcut like
+            # Win+Shift+S) releases the mic again quickly; start() cancels this
+            # timer when a dictation begins. When keep_mic_warm is ON the stream
+            # stays open and the keep-alive watchdog maintains it, so no timer.
+            if not already_warm and not load_settings().audio.keep_mic_warm:
                 self._schedule_idle_close_locked(PREWARM_IDLE_S)
         if not already_warm:
-            log.debug("Mic prewarmed on hotkey key-down (releases in %.0fs if unused)",
-                      PREWARM_IDLE_S)
+            log.debug("Mic prewarmed on hotkey key-down")
 
     def _reinit_audio_locked(self) -> None:
         """Drop the stream and reinitialize PortAudio. After a sleep/resume the
@@ -426,7 +428,7 @@ class AudioService:
             self._idle_timer.cancel()
             self._idle_timer = None
 
-    def _schedule_idle_close_locked(self, seconds: float = WARM_IDLE_S) -> None:
+    def _schedule_idle_close_locked(self, seconds: float) -> None:
         self._cancel_idle_timer_locked()
         self._idle_timer = threading.Timer(seconds, self._close_if_idle)
         self._idle_timer.daemon = True
@@ -438,6 +440,43 @@ class AudioService:
             if not self._recording:
                 self._close_stream_locked()
                 log.info("Released idle microphone (warm stream closed)")
+
+    def start_keepalive(self) -> None:
+        """Start the background keep-alive that holds the capture stream open
+        continuously while keep_mic_warm is on — reopening it the instant it goes
+        inactive (some mics/drivers silently kill an idle stream within seconds,
+        which was reopening the mic cold on every dictation and clipping the first
+        words). Idempotent; call once at startup."""
+        if self._keepalive_thread is not None:
+            return
+        self._keepalive_thread = threading.Thread(
+            target=self._keepalive_loop, name="mic-keepalive", daemon=True)
+        self._keepalive_thread.start()
+        log.info("Microphone keep-alive active (every %.1fs)", KEEPALIVE_INTERVAL_S)
+
+    def _keepalive_loop(self) -> None:
+        while True:
+            time.sleep(KEEPALIVE_INTERVAL_S)
+            if self._keepalive_tick():
+                log.debug("Mic keep-alive reopened an inactive warm stream")
+
+    def _keepalive_tick(self) -> bool:
+        """One keep-alive check: while keep_mic_warm is on and we're not recording,
+        reopen the capture stream if it has gone inactive. Returns True if it
+        reopened. Separated from the loop so it's unit-testable."""
+        try:
+            s = load_settings().audio
+            if not s.keep_mic_warm:
+                return False            # on-demand mode: nothing to keep warm
+            with self._lock:
+                if self._recording:
+                    return False        # a dictation owns the stream right now
+                if self._stream is None or not self._stream.active:
+                    self._ensure_stream_locked(s)
+                    return True
+        except Exception as exc:
+            log.debug("Mic keep-alive reopen skipped: %s", exc)
+        return False
 
     def stop(self) -> np.ndarray:
         """Stop capture and return float32 mono audio normalized to [-1, 1].
@@ -462,11 +501,12 @@ class AudioService:
                    if pcm.size else 0.0)
             dead_stream = rms < SILENT_RMS_EPS and held >= SILENT_STREAM_MIN_HELD
             if dead_stream:
-                self._reinit_audio_locked()
+                self._reinit_audio_locked()      # keep-alive reopens it if warm
             elif not load_settings().audio.keep_mic_warm:
                 self._close_stream_locked()
-            else:
-                self._schedule_idle_close_locked()   # keep warm for an instant next start
+            # else: keep_mic_warm -> leave the stream open; the keep-alive watchdog
+            # (start_keepalive) holds it warm continuously so the next dictation
+            # never pays a cold open.
 
         # Use the rate we actually captured at (may be the mic's native rate).
         capture_rate = self._capture_rate or load_settings().audio.sample_rate

@@ -3,6 +3,18 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.84] — 2026-10-11
+
+### Fixed
+- **The mic no longer re-opens cold on every dictation.** On some mics the
+  driver silently kills an idle capture stream within seconds, so each dictation
+  was paying a cold open (0.2–1.3 s) — the pill lagged and the first word or two
+  were lost, even with the pre-roll in place. With "Keep microphone ready" on, a
+  background keep-alive now holds the capture stream open continuously and
+  reopens it the instant it goes inactive, so every dictation starts warm with a
+  full pre-roll. Trade-off: the mic indicator stays on while WhisperText is
+  running (turn "Keep microphone ready" off to release it between dictations).
+
 ## [1.0.83] — 2026-10-11
 
 ### Removed

@@ -20,7 +20,7 @@ from backend.api.routes import router
 from backend.config import APP_VERSION, BACKEND_HOST, BACKEND_PORT
 from backend.utils.api_token import ensure_token, token_ok
 from backend.models.settings import load_settings
-from backend.services.audio_service import speech_seconds
+from backend.services.audio_service import audio_service, speech_seconds
 from backend.services.event_bus import bus
 from backend.services.hotkey_service import hotkey_service
 from backend.services.pipeline import pipeline
@@ -67,6 +67,10 @@ async def lifespan(app: FastAPI):
     hotkey_service.on_clipboard_insert = pipeline.clipboard_insert
     hotkey_service.on_ptt_prewarm = pipeline.ptt_prewarm
     hotkey_service.start()
+
+    # Hold the mic warm continuously (reopening it if the driver lets an idle
+    # stream die) so dictations never pay a cold open — see start_keepalive.
+    audio_service.start_keepalive()
 
     # Background warm-up + history retention (non-blocking).
     threading.Thread(target=_warm_whisper, daemon=True).start()

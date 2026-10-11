@@ -106,3 +106,39 @@ def test_preroll_capped_to_recent_audio(monkeypatch):
     assert len(svc._preroll) == as_mod._PREROLL_BLOCKS    # only the most recent kept
     svc._close_stream_locked()
     assert len(svc._preroll) == 0                         # cleared on close
+
+
+def test_stop_leaves_stream_open_when_warm(monkeypatch):
+    # With keep_mic_warm on, stopping must NOT close the stream — the keep-alive
+    # holds it warm continuously so the next dictation isn't a cold open.
+    svc, created = _setup(monkeypatch, keep_warm=True)
+    svc.start()
+    svc._chunks = [_block(16000, 300)]                    # a real (non-silent) capture
+    svc._started_at = svc._started_at - 1                 # ~1s held
+    svc.stop()
+    assert created[0].active and created[0].closed == 0   # left open, not released
+
+
+def test_keepalive_reopens_dead_stream(monkeypatch):
+    svc, created = _setup(monkeypatch, keep_warm=True)
+    svc.prewarm()                                         # open a warm stream
+    assert created[0].active
+    created[0].active = False                             # driver silently killed it
+    assert svc._keepalive_tick() is True                  # watchdog reopens it
+    assert len(created) == 2 and created[1].active
+    assert svc._keepalive_tick() is False                 # healthy stream left alone
+    assert len(created) == 2
+
+
+def test_keepalive_noop_when_warm_disabled(monkeypatch):
+    svc, created = _setup(monkeypatch, keep_warm=False)
+    assert svc._keepalive_tick() is False                 # on-demand: nothing to hold
+    assert len(created) == 0
+
+
+def test_keepalive_skips_during_recording(monkeypatch):
+    svc, created = _setup(monkeypatch, keep_warm=True)
+    svc.start()                                           # a dictation owns the stream
+    created[0].active = False
+    assert svc._keepalive_tick() is False                 # don't touch it mid-dictation
+    assert len(created) == 1
