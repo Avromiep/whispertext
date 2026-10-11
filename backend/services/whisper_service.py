@@ -119,8 +119,10 @@ class WhisperService:
         text = strip_trailing_ellipsis(" ".join(seg.text.strip() for seg in kept).strip())
         elapsed = time.monotonic() - t0
 
-        log.info("Transcribed %.1fs audio in %.2fs (%s): %r",
-                 audio.size / 16000, elapsed, info.language, text[:80])
+        # Log the size, never the transcript itself — dictated text can be
+        # sensitive and the log is plain-text on disk.
+        log.info("Transcribed %.1fs audio in %.2fs (%s): %d chars",
+                 audio.size / 16000, elapsed, info.language, len(text))
         return TranscriptionResult(
             text=text,
             language=info.language,

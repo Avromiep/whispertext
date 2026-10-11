@@ -156,22 +156,20 @@ def apply_text_replacements(text: str, rules: list) -> str:
     """Apply user substitutions (e.g. "gonna" -> "going to") to `text`. Each rule
     matches its `match` as a whole word/phrase, case-insensitively, and keeps the
     matched text's leading capitalization (so "Gonna" at a sentence start becomes
-    "Going to"). Longer matches are applied first so a multi-word rule wins over a
-    shorter overlapping one. No-op when there are no rules."""
-    for rule in sorted(rules, key=lambda r: len(getattr(r, "match", "") or ""), reverse=True):
-        match = (getattr(rule, "match", "") or "").strip()
-        replace = (getattr(rule, "replace", "") or "")
-        if not match:
-            continue
-        pattern = re.compile(r"(?<![\w'])" + re.escape(match) + r"(?![\w'])", re.IGNORECASE)
+    "Going to"). Longer matches win over a shorter overlapping one. No-op when
+    there are no rules.
 
-        def _sub(m: re.Match, repl=replace) -> str:
-            # Keep the original's leading capital (sentence start / proper noun).
-            return repl[0].upper() + repl[1:] if repl and m.group(0)[:1].isupper() else repl
-        text = pattern.sub(_sub, text)
+    Applied in a SINGLE pass over the original text — a replacement's output is
+    never re-scanned, so rules can't chain: with "gonna" -> "going to" and
+    "going" -> "heading", "gonna" yields "going to", not "heading to". Shares
+    replacement_segments (the live pill preview) so the typed result and the
+    preview always agree."""
+    if not rules:
+        return text
+    out = "".join(seg["text"] for seg in replacement_segments(text, rules))
     # Collapse any horizontal-whitespace gaps a deletion/replacement opened up
     # (e.g. removing a word), without touching line breaks.
-    return re.sub(r"[^\S\r\n]{2,}", " ", text).strip()
+    return re.sub(r"[^\S\r\n]{2,}", " ", out).strip()
 
 
 def replacement_segments(text: str, rules: list) -> list:

@@ -79,8 +79,9 @@ class GroqWhisperService:
         r.raise_for_status()
         text = strip_trailing_ellipsis(r.json().get("text", "").strip())
         elapsed = time.monotonic() - t0
-        log.info("Groq transcribed %.1fs audio in %.2fs: %r",
-                 audio.size / 16000, elapsed, text[:80])
+        # Log the size, never the transcript itself (sensitive; plain-text log).
+        log.info("Groq transcribed %.1fs audio in %.2fs: %d chars",
+                 audio.size / 16000, elapsed, len(text))
         return TranscriptionResult(
             text=text, language=language if language != "auto" else "en",
             confidence=1.0, processing_s=round(elapsed, 3))

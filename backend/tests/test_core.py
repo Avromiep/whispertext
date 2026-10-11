@@ -646,6 +646,25 @@ class TestTextReplacements:
         from backend.utils.text import apply_text_replacements
         assert apply_text_replacements("leave me alone", []) == "leave me alone"
 
+    def test_replacements_do_not_chain(self):
+        # A single pass over the original text: one rule's output must not be
+        # re-scanned by another. "gonna"->"going to" with "going"->"heading"
+        # yields "going to", never "heading to".
+        from backend.utils.text import apply_text_replacements
+        rules = self._rules([("gonna", "going to"), ("going", "heading")])
+        assert apply_text_replacements("I'm gonna win", rules) == "I'm going to win"
+        assert apply_text_replacements("I'm going home", rules) == "I'm heading home"
+        assert apply_text_replacements("gonna, then going", rules) == "going to, then heading"
+
+    def test_final_matches_preview_segments(self):
+        # The typed result must equal the live-preview segments joined, so the
+        # pill never shows something different from what's typed.
+        from backend.utils.text import apply_text_replacements, replacement_segments
+        rules = self._rules([("gonna", "going to"), ("going", "heading")])
+        text = "I'm gonna and then going"
+        joined = "".join(s["text"] for s in replacement_segments(text, rules))
+        assert apply_text_replacements(text, rules) == joined.strip()
+
     def test_segments_mark_the_swap(self):
         from backend.utils.text import replacement_segments
         segs = replacement_segments("I'm gonna leave", self._rules([("gonna", "going to")]))

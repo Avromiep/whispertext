@@ -3,6 +3,24 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.82] — 2026-10-11
+
+### Fixed
+- **Text replacements no longer chain.** With rules like "gonna" → "going to"
+  and "going" → "heading", saying "gonna" now correctly types "going to" instead
+  of "heading to". Replacements apply in a single pass over what you said, and
+  the typed result always matches the live preview in the pill.
+
+### Changed
+- **Dictation text is no longer written to the log file.** The transcription log
+  lines now record only the character count, not the first words of what you
+  said — your dictations stay out of the plain-text log on disk.
+- **The microphone releases quickly after a non-dictation shortcut.** Pressing
+  the push-to-talk keys as part of another shortcut (e.g. Win+Shift+S for the
+  snipping tool) briefly opens the mic for the pre-roll; it now closes again
+  within a few seconds if no dictation follows, instead of staying warm for the
+  full idle window.
+
 ## [1.0.81] — 2026-10-08
 
 ### Fixed

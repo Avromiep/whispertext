@@ -26,6 +26,13 @@ MAX_RECORD_SECONDS = 600  # hard safety cap for hands-free mode
 # holding the microphone open forever.
 WARM_IDLE_S = 180.0
 
+# After a prewarm that opened a COLD stream on hotkey key-down, release the mic
+# this soon if no dictation actually started — so a non-dictation chord that
+# starts with the push-to-talk keys (e.g. Win+Shift+S for the snipping tool)
+# doesn't leave the microphone open for the full warm idle. A real dictation
+# starts within ~60ms, well inside this, and cancels the timer.
+PREWARM_IDLE_S = 5.0
+
 # Pre-roll: while the stream is warm but idle, keep a short rolling buffer of the
 # most recent audio. When recording starts it's prepended, so words spoken in the
 # gap between pressing the hotkey and capture actually beginning (the push-to-talk
@@ -389,11 +396,16 @@ class AudioService:
             except Exception as exc:
                 log.debug("Mic prewarm skipped (will open on record): %s", exc)
                 return
-            # If recording doesn't follow, release the mic after the usual idle;
-            # start() cancels this timer when a dictation begins.
-            self._schedule_idle_close_locked()
+            # If this prewarm opened a cold stream and no dictation follows (the
+            # chord was a non-dictation shortcut like Win+Shift+S), release the
+            # mic again quickly instead of holding it for the full warm idle.
+            # start() cancels this timer when a dictation begins; a stream that
+            # was already warm keeps its existing (longer) idle timer.
+            if not already_warm:
+                self._schedule_idle_close_locked(PREWARM_IDLE_S)
         if not already_warm:
-            log.debug("Mic prewarmed on hotkey key-down")
+            log.debug("Mic prewarmed on hotkey key-down (releases in %.0fs if unused)",
+                      PREWARM_IDLE_S)
 
     def _reinit_audio_locked(self) -> None:
         """Drop the stream and reinitialize PortAudio. After a sleep/resume the
@@ -414,9 +426,9 @@ class AudioService:
             self._idle_timer.cancel()
             self._idle_timer = None
 
-    def _schedule_idle_close_locked(self) -> None:
+    def _schedule_idle_close_locked(self, seconds: float = WARM_IDLE_S) -> None:
         self._cancel_idle_timer_locked()
-        self._idle_timer = threading.Timer(WARM_IDLE_S, self._close_if_idle)
+        self._idle_timer = threading.Timer(seconds, self._close_if_idle)
         self._idle_timer.daemon = True
         self._idle_timer.start()
 
