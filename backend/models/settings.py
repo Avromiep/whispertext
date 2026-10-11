@@ -29,7 +29,6 @@ class HotkeySettings(BaseModel):
     # Double-tap Right Ctrl toggles hands-free mode (spec-required default).
     toggle_key: str = "right ctrl"
     double_tap_window_ms: int = 350
-    open_settings: str = "ctrl+alt+w"
     # While holding push-to-talk and dictating, tapping this key splices the
     # clipboard into the transcript at that point (default Win+Shift+N).
     clipboard_insert_key: str = "n"
@@ -116,7 +115,6 @@ class AISettings(BaseModel):
 class TypingSettings(BaseModel):
     method: TypingMethod = "auto"
     chars_per_second: int = 250              # keystroke simulation speed
-    instant_paste_threshold: int = 200       # chars; longer text auto-switches to paste
     pre_type_delay_ms: int = 30
     restore_clipboard: bool = True
 

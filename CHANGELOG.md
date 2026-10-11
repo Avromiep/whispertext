@@ -3,6 +3,14 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.83] — 2026-10-11
+
+### Removed
+- **Dropped two settings that did nothing.** `instant_paste_threshold` (the
+  "auto" typing method always pastes, so the threshold was never consulted) and
+  the unwired `open_settings` hotkey are gone. No behavior change — both were
+  dead. Existing settings files load fine; the stale keys are simply ignored.
+
 ## [1.0.82] — 2026-10-11
 
 ### Fixed
