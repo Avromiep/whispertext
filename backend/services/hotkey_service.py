@@ -111,6 +111,7 @@ class HotkeyService:
         self._hook = None
         self._lock = threading.Lock()
         self._paused = False
+        self._user_paused = False             # paused by the user (tray/endpoint), not by typing
         self._last_seen = 0.0                 # heartbeat: last time _on_event ran
         self._watchdog: threading.Thread | None = None
         self._watchdog_stop = threading.Event()
@@ -169,6 +170,21 @@ class HotkeyService:
         if self._hook is not None:
             keyboard.unhook(self._hook)
             self._hook = None
+
+    @property
+    def user_paused(self) -> bool:
+        """True when the user paused dictation (tray Pause / the pause endpoint),
+        as opposed to the brief internal pause during typing injection. The mic
+        keep-alive releases the microphone while this is set."""
+        return self._user_paused
+
+    def set_user_paused(self, paused: bool) -> None:
+        """Pause/resume from the user (tray, settings): marks the pause as
+        user-initiated AND pauses the hook. Distinct from set_paused, which is
+        also called transiently while injecting typed text — that must not count
+        as a user pause (or the keep-alive would drop the mic every dictation)."""
+        self._user_paused = paused
+        self.set_paused(paused)
 
     def set_paused(self, paused: bool) -> None:
         self._paused = paused

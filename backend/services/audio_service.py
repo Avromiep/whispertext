@@ -28,6 +28,16 @@ MAX_RECORD_SECONDS = 600  # hard safety cap for hands-free mode
 # words. The watchdog checks this often:
 KEEPALIVE_INTERVAL_S = 2.0
 
+# If a keep-alive open fails (no mic available — unplugged, grabbed by another
+# app, an RDP session with no redirected mic), back off instead of retrying hard
+# every 2s: wait this long after the Nth consecutive failure before trying again.
+_KEEPALIVE_BACKOFF = (2.0, 5.0, 15.0, 60.0)
+
+
+def _keepalive_backoff(fails: int) -> float:
+    """Seconds to wait after `fails` consecutive keep-alive open failures."""
+    return _KEEPALIVE_BACKOFF[min(max(fails, 1) - 1, len(_KEEPALIVE_BACKOFF) - 1)]
+
 # With keep_mic_warm OFF the mic opens on demand. A prewarm (hotkey key-down)
 # that opened a cold stream then releases it this soon if no dictation follows —
 # so a non-dictation chord that begins with the push-to-talk keys (e.g.
@@ -291,10 +301,16 @@ class AudioService:
         if time.monotonic() - self._started_at > MAX_RECORD_SECONDS:
             self._recording = False   # hard cap; leave the stream warm to reuse
 
-    def _ensure_stream_locked(self, s) -> None:
+    def _ensure_stream_locked(self, s, allow_reinit: bool = True) -> None:
         """Guarantee an open, active capture stream for the configured device.
         Reused across dictations, so only the first (cold) open pays the device
-        open latency (0.2-1.3s) — later starts are instant."""
+        open latency (0.2-1.3s) — later starts are instant.
+
+        allow_reinit=False (used by the keep-alive) means a failed open does NOT
+        trigger the heavy PortAudio reinit+retry — it just raises, so the caller
+        can back off instead of reinitializing the audio backend every couple of
+        seconds when no mic is available. The next real dictation still self-heals
+        a stale backend via the normal (allow_reinit=True) path."""
         if (self._stream is not None and self._stream.active
                 and self._stream_device == s.input_device):
             return
@@ -337,6 +353,9 @@ class AudioService:
         self._last_open_exc = None
         if try_open():
             return
+        if not allow_reinit:
+            # Keep-alive path: don't reinitialize PortAudio on a speculative open.
+            raise RuntimeError(f"No microphone available: {self._last_open_exc}")
         # Every rate failed — the device may be in a stale/invalidated state
         # (e.g. WASAPI AUDCLNT_E_DEVICE_INVALIDATED after idle/resume, or a stale
         # PortAudio handle). Refresh the audio backend and try the whole set once
@@ -455,28 +474,50 @@ class AudioService:
         log.info("Microphone keep-alive active (every %.1fs)", KEEPALIVE_INTERVAL_S)
 
     def _keepalive_loop(self) -> None:
+        fails = 0
+        next_attempt = 0.0
         while True:
             time.sleep(KEEPALIVE_INTERVAL_S)
-            if self._keepalive_tick():
-                log.debug("Mic keep-alive reopened an inactive warm stream")
+            if time.monotonic() < next_attempt:
+                continue                   # backing off after a failed open
+            try:
+                if self._keepalive_tick() == "reopened":
+                    log.debug("Mic keep-alive reopened an inactive warm stream")
+                if fails:
+                    log.info("Mic keep-alive recovered the microphone")
+                fails = 0
+                next_attempt = 0.0
+            except Exception as exc:
+                fails += 1
+                next_attempt = time.monotonic() + _keepalive_backoff(fails)
+                if fails == 1:             # log once per outage, not every retry
+                    log.info("Mic keep-alive can't open the microphone (%s); backing off", exc)
 
-    def _keepalive_tick(self) -> bool:
-        """One keep-alive check: while keep_mic_warm is on and we're not recording,
-        reopen the capture stream if it has gone inactive. Returns True if it
-        reopened. Separated from the loop so it's unit-testable."""
-        try:
-            s = load_settings().audio
-            if not s.keep_mic_warm:
-                return False            # on-demand mode: nothing to keep warm
+    def _keepalive_tick(self) -> str:
+        """One keep-alive step. Returns "reopened" if it reopened a dead stream,
+        "released" if it closed/left the mic released, or "idle" if nothing was
+        needed. Raises if a reopen was attempted and failed (so the loop backs
+        off). Separated from the loop so it's unit-testable.
+
+        The mic is released (closed if open, not reopened) when keep_mic_warm is
+        off OR the user has paused dictation (tray Pause) — so turning the toggle
+        off or pausing frees the microphone within one tick rather than waiting
+        for the next dictation. The transient typing-injection pause is NOT a user
+        pause, so it never releases the mic."""
+        from backend.services.hotkey_service import hotkey_service
+        s = load_settings().audio
+        if not s.keep_mic_warm or hotkey_service.user_paused:
             with self._lock:
-                if self._recording:
-                    return False        # a dictation owns the stream right now
-                if self._stream is None or not self._stream.active:
-                    self._ensure_stream_locked(s)
-                    return True
-        except Exception as exc:
-            log.debug("Mic keep-alive reopen skipped: %s", exc)
-        return False
+                if not self._recording and self._stream is not None:
+                    self._close_stream_locked()
+            return "released"
+        with self._lock:
+            if self._recording:
+                return "idle"             # a dictation owns the stream right now
+            if self._stream is None or not self._stream.active:
+                self._ensure_stream_locked(s, allow_reinit=False)
+                return "reopened"
+        return "idle"
 
     def stop(self) -> np.ndarray:
         """Stop capture and return float32 mono audio normalized to [-1, 1].

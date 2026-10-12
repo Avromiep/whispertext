@@ -3,6 +3,22 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.85] — 2026-10-11
+
+### Changed
+- **Mic keep-alive is gentler and tidier** (refinements to 1.0.84):
+  - If the microphone can't be opened (unplugged, grabbed by another app, or an
+    RDP session with no redirected mic), the keep-alive now **backs off**
+    (2 → 5 → 15 → 60 s) and logs once, instead of retrying hard every 2 s — and
+    it no longer reinitializes the audio backend on those speculative retries.
+  - **Pausing dictation from the tray now releases the microphone** (the warm
+    stream is closed while paused), and resuming re-arms it. The brief internal
+    pause while text is being typed does *not* release the mic.
+  - **Turning "Keep microphone ready" off now frees the mic right away** instead
+    of waiting for the next dictation to end.
+- The "Keep microphone ready" tooltip now notes that holding the mic open can
+  keep a Bluetooth headset in lower-quality call-audio mode.
+
 ## [1.0.84] — 2026-10-11
 
 ### Fixed

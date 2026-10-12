@@ -162,7 +162,8 @@ async def dictation_toggle() -> dict:
 
 @router.post("/dictation/pause")
 async def dictation_pause(paused: bool = True) -> dict:
-    hotkey_service.set_paused(paused)
+    # User-initiated pause (tray Pause/Resume): also releases the warm mic.
+    hotkey_service.set_user_paused(paused)
     return {"paused": paused}
 
 

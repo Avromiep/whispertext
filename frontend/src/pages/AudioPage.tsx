@@ -95,7 +95,7 @@ export default function AudioPage() {
         <Toggle label="Voice activity detection" description="Filter non-speech segments during transcription"
           checked={a.vad_enabled} onChange={(v) => patch({ audio: { vad_enabled: v } })} />
         <Toggle label="Keep microphone ready"
-          description="Recording starts instantly instead of clipping your first words. The mic is held active the whole time WhisperText runs (its indicator stays on). Turn off to open it only while recording — lighter, but the first word or two can get clipped."
+          description="Recording starts instantly instead of clipping your first words. The mic is held active the whole time WhisperText runs (its indicator stays on, and this can keep a Bluetooth headset in lower-quality call-audio mode). Turn off to open it only while recording — lighter, but the first word or two can get clipped."
           checked={a.keep_mic_warm} onChange={(v) => patch({ audio: { keep_mic_warm: v } })} />
       </Section>
 
