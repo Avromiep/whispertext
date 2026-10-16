@@ -3,6 +3,16 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.86] — 2026-10-15
+
+### Added
+- **Remove an engine you don't use.** Each cloud engine on the Models page (Groq,
+  Deepgram, Grok) now has a trash button that hides it from the engine picker and
+  deletes its saved API key, after a confirmation. Removed engines show under a
+  "Removed:" line with a **Restore** link if you want it back (you'll re-enter the
+  key). Local can't be removed — it's the offline fallback. If you remove the
+  engine currently in use, WhisperText switches to Deepgram (or Local).
+
 ## [1.0.85] — 2026-10-11
 
 ### Changed

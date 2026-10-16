@@ -1,5 +1,5 @@
 /** Whisper model management: transcription engine choice, local model status, downloads. */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Check, Cloud, Download, ExternalLink, HardDrive, Loader2, Radio, RefreshCw, Trash2, X, Zap } from "lucide-react";
 import { api, bridge, SystemInfo, WhisperModelInfo } from "../lib/api";
 import { useBackendEvents } from "../lib/ws";
@@ -187,6 +187,7 @@ export default function ModelsPage() {
   const [groqConfigured, setGroqConfigured] = useState(false);
   const [deepgramConfigured, setDeepgramConfigured] = useState(false);
   const [grokConfigured, setGrokConfigured] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
 
   const load = useCallback(() => { api.models().then(setModels).catch(() => {}); }, []);
   useEffect(() => {
@@ -215,6 +216,34 @@ export default function ModelsPage() {
     load();
   };
 
+  const hidden = settings.whisper.hidden_engines ?? [];
+  // The engine picker, data-driven so a removed cloud engine can be filtered
+  // out. Local is the offline fallback and is never removable.
+  const engineCards: { id: typeof engine; label: string; icon: ReactNode; sub: string; removable: boolean }[] = [
+    { id: "local", label: "Local", icon: <HardDrive size={13} />, sub: "Offline, private, no account", removable: false },
+    { id: "groq", label: "Groq · Whisper", icon: <Cloud size={13} />, sub: groqConfigured ? "Key configured ✓" : "Fast batch · needs key", removable: true },
+    { id: "deepgram", label: "Deepgram", icon: <Radio size={13} />, sub: deepgramConfigured ? "Key configured ✓" : "Live · feels instant", removable: true },
+    { id: "grok", label: "Grok · xAI", icon: <Zap size={13} />, sub: grokConfigured ? "Key configured ✓" : "Live · cheaper stream", removable: true },
+  ];
+  const engineLabel = (id: string) => engineCards.find((c) => c.id === id)?.label ?? id;
+
+  // Remove a cloud engine: hide it from the picker and forget its saved key; if
+  // it's the one in use, switch to a still-visible engine (Deepgram, else Local).
+  const removeEngine = async (id: string) => {
+    const nextHidden = [...new Set([...hidden, id])];
+    const nextEngine = engine === id
+      ? (!nextHidden.includes("deepgram") ? "deepgram" : "local")
+      : engine;
+    await patch({ whisper: { hidden_engines: nextHidden, engine: nextEngine as typeof engine } });
+    await api.setApiKey(id, "").catch(() => {});       // "" deletes the stored key
+    if (id === "groq") { await api.setApiKey("groq_backup", "").catch(() => {}); setGroqConfigured(false); setShowBackup(false); }
+    if (id === "deepgram") setDeepgramConfigured(false);
+    if (id === "grok") setGrokConfigured(false);
+  };
+
+  const restoreEngine = (id: string) =>
+    patch({ whisper: { hidden_engines: hidden.filter((x) => x !== id) } });
+
   return (
     <div className="animate-fade-in">
       <PageHeader title="Models" subtitle="How your speech becomes text — pick local or cloud transcription."
@@ -225,32 +254,36 @@ export default function ModelsPage() {
         } />
 
       <Section title="Transcription engine" description="Local never leaves your machine. Groq is a fast batch cloud engine. Deepgram and Grok (xAI) both stream live — they transcribe while you talk, so there's no wait after you release the hotkey.">
-        <div className="grid grid-cols-2 gap-2 mb-4">
-          <button onClick={() => patch({ whisper: { engine: "local" } })}
-            className={cn("rounded-xl border p-3 text-left transition-all",
-              engine === "local" ? "border-accent bg-accent/10" : "border-border hover:border-accent/40")}>
-            <div className="text-sm font-medium flex items-center gap-1.5"><HardDrive size={13} /> Local</div>
-            <div className="text-[11px] text-muted mt-0.5">Offline, private, no account</div>
-          </button>
-          <button onClick={() => patch({ whisper: { engine: "groq" } })}
-            className={cn("rounded-xl border p-3 text-left transition-all",
-              engine === "groq" ? "border-accent bg-accent/10" : "border-border hover:border-accent/40")}>
-            <div className="text-sm font-medium flex items-center gap-1.5"><Cloud size={13} /> Groq · Whisper</div>
-            <div className="text-[11px] text-muted mt-0.5">{groqConfigured ? "Key configured ✓" : "Fast batch · needs key"}</div>
-          </button>
-          <button onClick={() => patch({ whisper: { engine: "deepgram" } })}
-            className={cn("rounded-xl border p-3 text-left transition-all",
-              engine === "deepgram" ? "border-accent bg-accent/10" : "border-border hover:border-accent/40")}>
-            <div className="text-sm font-medium flex items-center gap-1.5"><Radio size={13} /> Deepgram</div>
-            <div className="text-[11px] text-muted mt-0.5">{deepgramConfigured ? "Key configured ✓" : "Live · feels instant"}</div>
-          </button>
-          <button onClick={() => patch({ whisper: { engine: "grok" } })}
-            className={cn("rounded-xl border p-3 text-left transition-all",
-              engine === "grok" ? "border-accent bg-accent/10" : "border-border hover:border-accent/40")}>
-            <div className="text-sm font-medium flex items-center gap-1.5"><Zap size={13} /> Grok · xAI</div>
-            <div className="text-[11px] text-muted mt-0.5">{grokConfigured ? "Key configured ✓" : "Live · cheaper stream"}</div>
-          </button>
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          {engineCards.filter((e) => !hidden.includes(e.id)).map((e) => (
+            <div key={e.id} className="relative">
+              <button onClick={() => patch({ whisper: { engine: e.id } })}
+                className={cn("w-full rounded-xl border p-3 text-left transition-all",
+                  engine === e.id ? "border-accent bg-accent/10" : "border-border hover:border-accent/40")}>
+                <div className="text-sm font-medium flex items-center gap-1.5 pr-5">{e.icon} {e.label}</div>
+                <div className="text-[11px] text-muted mt-0.5">{e.sub}</div>
+              </button>
+              {e.removable && (
+                <button aria-label={`Remove ${e.label}`} onClick={() => setConfirmRemove(e.id)}
+                  className="absolute top-1.5 right-1.5 p-1 rounded-md text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                  <Trash2 size={12} />
+                </button>
+              )}
+            </div>
+          ))}
         </div>
+        {hidden.length > 0 && (
+          <div className="text-[11px] text-muted mb-4 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span>Removed:</span>
+            {hidden.map((id) => (
+              <span key={id} className="inline-flex items-center gap-1">
+                {engineLabel(id)}
+                <button onClick={() => restoreEngine(id)} className="text-accent hover:underline">Restore</button>
+              </span>
+            ))}
+          </div>
+        )}
+        {hidden.length === 0 && <div className="mb-4" />}
 
         {engine === "deepgram" && (
           <div className="space-y-4 pt-3 border-t border-border">
@@ -382,6 +415,31 @@ export default function ModelsPage() {
           ))}
         </div>
       </Section>
+
+      {confirmRemove !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 animate-fade-in"
+          onClick={() => setConfirmRemove(null)}
+          onKeyDown={(e) => { if (e.key === "Escape") setConfirmRemove(null); }}
+          role="dialog" aria-modal="true" aria-label="Confirm removing engine"
+        >
+          <div className="bg-surface border border-border rounded-2xl p-5 max-w-xs mx-4 shadow-xl animate-scale-in"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="text-sm font-medium mb-1">Remove {engineLabel(confirmRemove)}?</div>
+            <p className="text-xs text-muted mb-4">
+              This hides it from the engine list and deletes its saved API key. You can add it back later
+              (you'll re-enter the key).
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="ghost" autoFocus onClick={() => setConfirmRemove(null)}>Cancel</Button>
+              <Button size="sm" variant="danger"
+                onClick={() => { const id = confirmRemove; setConfirmRemove(null); removeEngine(id); }}>
+                Remove
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

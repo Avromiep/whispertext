@@ -81,6 +81,11 @@ class WhisperSettings(BaseModel):
     # Experimental (Grok only): use speaker diarization to keep only the dominant
     # speaker's words, dropping background voices. Best-effort — can mislabel.
     grok_isolate_speaker: bool = False
+    # Engines the user removed from the Models page (hidden from the picker and
+    # their API key forgotten). Local is never removable — it's the offline
+    # fallback. Hiding an engine is purely cosmetic: the fallback chain never
+    # auto-selects a cloud engine the user didn't pick, so nothing else changes.
+    hidden_engines: list[str] = Field(default_factory=list)
 
 
 class ProviderConfig(BaseModel):
