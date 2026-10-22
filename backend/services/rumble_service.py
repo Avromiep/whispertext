@@ -1,9 +1,10 @@
-"""One short controller buzz when recording actually starts.
+"""A short controller buzz when recording actually starts.
 
-A wired Xbox (XInput) controller gives a single ~200 ms rumble the moment the
-first microphone block after recording begins arrives — a quiet, hands-free
-"it's listening now" cue. Entirely optional and defensive: no controller, no
-XInput, or any failure => silent no-op and recording behaves exactly as before.
+A wired Xbox (XInput) controller buzzes the moment the first microphone block
+after recording begins arrives — a quiet, hands-free "it's listening now" cue.
+The shape is chosen by `audio.vibrate_style` (double tap by default; also strong
+or gentle). Entirely optional and defensive: no controller, no XInput, or any
+failure => silent no-op and recording behaves exactly as before.
 
 Stdlib only (ctypes/XInput); no new dependency, no network. XInput reaches only
 the two main rumble motors (the Series X|S trigger motors aren't addressable).
@@ -15,17 +16,24 @@ import ctypes
 import queue
 import sys
 import threading
-import time
 from ctypes import POINTER, byref, c_ubyte, c_uint32, c_ushort, c_short
 
-from backend.models.settings import load_settings
+from backend.models.settings import DEFAULT_VIBRATE_STYLE as DEFAULT_STYLE, load_settings
 from backend.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-RUMBLE_SECONDS = 0.2            # how long the buzz lasts (keep 0.15-0.2)
-MAX_RUMBLE_SECONDS = 0.5        # hard cap: the worker never sleeps longer than this
-MOTOR_STRENGTH = 45000          # 0..65535, both motors
+FULL = 65535                   # both motors, full power
+MAX_ON_SECONDS = 0.6           # cap per segment
+MAX_TOTAL_SECONDS = 1.0        # cap for the whole pattern
+# Each style is a sequence of (strength for BOTH motors, seconds); strength 0 is
+# a pause between pulses. The left motor is the heavy low-frequency one, so both
+# run together for the strongest feel.
+PATTERNS = {
+    "gentle": ((40000, 0.20),),
+    "strong": ((FULL, 0.40),),
+    "double": ((FULL, 0.25), (0, 0.15), (FULL, 0.25)),   # "Double tap"
+}
 
 ERROR_SUCCESS = 0
 _SENTINEL = object()            # queued to tell the worker to exit
@@ -131,6 +139,7 @@ class RumbleService:
         self._queue: "queue.SimpleQueue" = queue.SimpleQueue()
         self._thread: threading.Thread | None = None
         self._atexit_registered = False
+        self._stop_evt = threading.Event()   # set() interrupts an in-progress buzz
 
     def start(self) -> None:
         """Start the single worker thread. Idempotent; called from app.py at
@@ -140,14 +149,17 @@ class RumbleService:
         if not self._atexit_registered:
             atexit.register(self.stop_all)
             self._atexit_registered = True
+        self._stop_evt.clear()
         self._thread = threading.Thread(target=self._worker, name="controller-rumble", daemon=True)
         self._thread.start()
 
     def stop(self, timeout: float = 1.0) -> None:
-        """Ask the worker to exit and join it. Used by shutdown and tests."""
+        """Ask the worker to exit and join it. Used by shutdown and tests. Sets the
+        stop event first so a buzz in progress is cut short, not awaited."""
         t = self._thread
         if t is None:
             return
+        self._stop_evt.set()
         self._queue.put_nowait(_SENTINEL)
         t.join(timeout)
         self._thread = None
@@ -167,6 +179,18 @@ class RumbleService:
         except Exception:
             pass
 
+    def _drain_queue(self) -> bool:
+        """Remove everything currently queued; return True if a sentinel was seen."""
+        saw_sentinel = False
+        while True:
+            try:
+                item = self._queue.get_nowait()
+            except queue.Empty:
+                break
+            if item is _SENTINEL:
+                saw_sentinel = True
+        return saw_sentinel
+
     def _worker(self) -> None:
         # Clear any motor a hard-killed previous run might have left spinning.
         self.stop_all()
@@ -174,36 +198,48 @@ class RumbleService:
             item = self._queue.get()
             if item is _SENTINEL:
                 return
-            # Coalesce a burst of requests into one buzz; a sentinel still wins.
-            exit_now = False
-            while True:
-                try:
-                    extra = self._queue.get_nowait()
-                except queue.Empty:
-                    break
-                if extra is _SENTINEL:
-                    exit_now = True
+            exit_now = self._drain_queue()      # coalesce a burst into one buzz
             try:
-                if not load_settings().audio.vibrate_controller_on_record:
+                a = load_settings().audio
+                if not a.vibrate_controller_on_record:
                     log.debug("Rumble: disabled in settings")
                 else:
-                    self.pulse()
+                    self.pulse(a.vibrate_style)
             except Exception:
                 log.exception("Rumble: failed (ignored)")
-            if exit_now:
+            # Drop requests that arrived DURING the buzz — never stack them.
+            if self._drain_queue():
+                exit_now = True
+            if exit_now or self._stop_evt.is_set():
                 return
 
-    def pulse(self) -> None:
-        """Buzz the first connected controller for RUMBLE_SECONDS, then always zero
-        the motors. No exception ever leaves this method."""
+    def pulse(self, style: str = DEFAULT_STYLE) -> None:
+        """Play one buzz pattern on the first connected controller, then always
+        zero the motors. Waits between segments are interruptible (stop() cuts a
+        buzz short). No exception ever leaves this method."""
         slot = self._backend.first_connected()
         if slot is None:
             log.debug("Rumble: no controller")
             return
+        steps = PATTERNS.get(style, PATTERNS[DEFAULT_STYLE])
+        total = 0.0
+        aborted = False
         try:
-            rc = self._backend.set_motors(slot, MOTOR_STRENGTH, MOTOR_STRENGTH)
-            log.info("Rumble: fired on slot %d (rc=%s)", slot, rc)
-            time.sleep(max(0, min(RUMBLE_SECONDS, MAX_RUMBLE_SECONDS)))
+            for strength, secs in steps:
+                secs = max(0.0, min(secs, MAX_ON_SECONDS, MAX_TOTAL_SECONDS - total))
+                if secs <= 0 or self._stop_evt.is_set():
+                    break
+                rc = self._backend.set_motors(slot, strength, strength)  # 0 = pause (both motors off)
+                if rc not in (0, None):
+                    log.info("Rumble: controller not reachable (rc=%s), stopping", rc)
+                    aborted = True
+                    break
+                total += secs
+                if self._stop_evt.wait(secs):    # interruptible — not time.sleep
+                    aborted = True
+                    break
+            if not aborted:
+                log.info("Rumble: fired on slot %d (style=%s)", slot, style)
         except Exception:
             log.exception("Rumble: pulse failed (ignored)")
         finally:

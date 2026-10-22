@@ -6,6 +6,9 @@ import { useBackendEvents } from "../lib/ws";
 import { useSettings } from "../hooks/useSettings";
 import { Button, PageHeader, Section, Select, Toggle } from "../components/ui";
 
+// Must equal DEFAULT_VIBRATE_STYLE in backend/models/settings.py.
+const DEFAULT_BUZZ_STYLE = "double";
+
 export default function AudioPage() {
   const { settings, patch } = useSettings();
   const [devices, setDevices] = useState<AudioDevice[]>([]);
@@ -101,9 +104,18 @@ export default function AudioPage() {
 
       <Section title="Xbox controller">
         <Toggle label="Vibrate controller when recording starts"
-          description="A wired Xbox controller gives one short buzz the moment WhisperText starts listening. No setup needed; does nothing if no controller is plugged in."
+          description="A wired Xbox controller gives a buzz the moment WhisperText starts listening. No setup needed; does nothing if no controller is plugged in."
           checked={a.vibrate_controller_on_record !== false}
           onChange={(v) => patch({ audio: { vibrate_controller_on_record: v } })} />
+        {a.vibrate_controller_on_record !== false && (
+          <Select className="mt-3" label="Buzz style" value={a.vibrate_style || DEFAULT_BUZZ_STYLE}
+            onChange={(v) => patch({ audio: { vibrate_style: v } })}
+            options={[
+              { value: "double", label: "Double tap" },
+              { value: "strong", label: "Strong" },
+              { value: "gentle", label: "Gentle" },
+            ].map((o) => (o.value === DEFAULT_BUZZ_STYLE ? { ...o, label: o.label + " (default)" } : o))} />
+        )}
       </Section>
 
       <Section title="Format">

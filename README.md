@@ -37,8 +37,8 @@ Global hotkey → record (in RAM) → transcribe → AI cleanup → insert (clip
   Manager, history is local SQLite and can be disabled entirely.
 - **Polish**: system tray (with "Copy Last Dictation"), onboarding wizard,
   dark/light/system themes, hardware-aware local-model recommendations.
-- **Controller buzz**: an optional short rumble on a wired Xbox controller the
-  moment recording starts (Audio → Xbox controller).
+- **Controller buzz**: an optional buzz (double tap by default) on a wired Xbox
+  controller the moment recording starts (Audio → Xbox controller).
 
 ## Quick start (from source)
 

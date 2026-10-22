@@ -6,7 +6,7 @@ import threading
 import time
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.config import APP_DIR, SETTINGS_FILE
 
@@ -21,6 +21,12 @@ Theme = Literal["dark", "light", "system"]
 AIMode = Literal["cloud", "local", "hybrid"]
 PerfProfile = Literal["quality", "balanced", "speed"]
 TypingMethod = Literal["auto", "keystrokes", "clipboard"]
+
+# Controller-buzz shapes (see rumble_service.PATTERNS). Not a Literal on purpose:
+# a bad value must fall back to the default, never raise — a ValueError would make
+# load_settings() treat settings.json as unreadable and reset ALL settings.
+VIBRATE_STYLES = ("gentle", "strong", "double")
+DEFAULT_VIBRATE_STYLE = "double"   # the feel-test pick; the one place the default is written
 
 
 class HotkeySettings(BaseModel):
@@ -62,6 +68,18 @@ class AudioSettings(BaseModel):
     # hands-free "listening now" cue). No-op without a controller. Default on; a
     # missing key stays on, so older settings files/backups are unaffected.
     vibrate_controller_on_record: bool = True
+    # Buzz shape: one of VIBRATE_STYLES. A missing or unknown value falls back to
+    # the default (see the validator — it must never raise).
+    vibrate_style: str = DEFAULT_VIBRATE_STYLE
+
+    @field_validator("vibrate_style", mode="before")
+    @classmethod
+    def _lenient_vibrate_style(cls, v):
+        # NEVER raises: unknown strings, None, numbers, lists, dicts all fall back
+        # to the default (a raise here would make load_settings reset everything).
+        if isinstance(v, str) and v.strip().lower() in VIBRATE_STYLES:
+            return v.strip().lower()
+        return DEFAULT_VIBRATE_STYLE
 
 
 class WhisperSettings(BaseModel):

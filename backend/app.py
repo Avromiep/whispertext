@@ -89,12 +89,13 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    # Stop the worker FIRST (so it can't switch a motor back on), then zero.
     try:
-        rumble_service.stop_all()   # never leave a motor buzzing
+        rumble_service.stop()
     except Exception:
         pass
     try:
-        rumble_service.stop()
+        rumble_service.stop_all()   # never leave a motor buzzing
     except Exception:
         pass
     hotkey_service.stop()

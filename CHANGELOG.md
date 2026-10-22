@@ -3,6 +3,18 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.88] — 2026-10-22
+
+### Changed
+- **The controller buzz is now easy to feel.** By default it's a full-power
+  **double tap** (two firm taps) the moment recording starts, instead of the one
+  short, soft buzz before. You can pick the feel under **Audio → Xbox controller
+  → Buzz style**: **Double tap** (default), **Strong** (one firm buzz), or
+  **Gentle** (a lighter single buzz) — or turn it off with the toggle. As before,
+  the tray **Start Dictation** and **Test microphone** buzz too, it does nothing
+  without a controller, and there's no buzz over Remote Desktop. If the
+  controller ever keeps buzzing, unplug it or restart WhisperText.
+
 ## [1.0.87] — 2026-10-21
 
 ### Added
