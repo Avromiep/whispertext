@@ -154,6 +154,7 @@ def test_pulse_default_matches_default_style():
 
 def test_pulse_strong_gentle_and_unknown():
     for style, exp_calls, exp_waits in [
+        ("single", [(0, FULL, FULL), (0, 0, 0)], [0.25]),
         ("strong", [(0, FULL, FULL), (0, 0, 0)], [0.40]),
         ("gentle", [(0, 40000, 40000), (0, 0, 0)], [0.20]),
     ]:

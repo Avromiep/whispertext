@@ -30,6 +30,7 @@ MAX_TOTAL_SECONDS = 1.0        # cap for the whole pattern
 # a pause between pulses. The left motor is the heavy low-frequency one, so both
 # run together for the strongest feel.
 PATTERNS = {
+    "single": ((FULL, 0.25),),                           # "Single tap" — one double-tap tap
     "gentle": ((40000, 0.20),),
     "strong": ((FULL, 0.40),),
     "double": ((FULL, 0.25), (0, 0.15), (FULL, 0.25)),   # "Double tap"

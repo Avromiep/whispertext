@@ -25,8 +25,8 @@ TypingMethod = Literal["auto", "keystrokes", "clipboard"]
 # Controller-buzz shapes (see rumble_service.PATTERNS). Not a Literal on purpose:
 # a bad value must fall back to the default, never raise — a ValueError would make
 # load_settings() treat settings.json as unreadable and reset ALL settings.
-VIBRATE_STYLES = ("gentle", "strong", "double")
-DEFAULT_VIBRATE_STYLE = "double"   # the feel-test pick; the one place the default is written
+VIBRATE_STYLES = ("single", "gentle", "strong", "double")
+DEFAULT_VIBRATE_STYLE = "single"   # the feel-test pick; the one place the default is written
 
 
 class HotkeySettings(BaseModel):

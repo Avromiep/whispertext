@@ -7,7 +7,7 @@ import { useSettings } from "../hooks/useSettings";
 import { Button, PageHeader, Section, Select, Toggle } from "../components/ui";
 
 // Must equal DEFAULT_VIBRATE_STYLE in backend/models/settings.py.
-const DEFAULT_BUZZ_STYLE = "double";
+const DEFAULT_BUZZ_STYLE = "single";
 
 export default function AudioPage() {
   const { settings, patch } = useSettings();
@@ -111,6 +111,7 @@ export default function AudioPage() {
           <Select className="mt-3" label="Buzz style" value={a.vibrate_style || DEFAULT_BUZZ_STYLE}
             onChange={(v) => patch({ audio: { vibrate_style: v } })}
             options={[
+              { value: "single", label: "Single tap" },
               { value: "double", label: "Double tap" },
               { value: "strong", label: "Strong" },
               { value: "gentle", label: "Gentle" },

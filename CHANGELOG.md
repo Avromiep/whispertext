@@ -3,6 +3,14 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.89] — 2026-10-22
+
+### Changed
+- **Added a "Single tap" buzz and made it the default.** One firm full-power tap
+  (the same strength as a double-tap tap) the moment recording starts. Pick it
+  under **Audio → Xbox controller → Buzz style**, where the choices are now
+  **Single tap** (default), **Double tap**, **Strong**, and **Gentle**.
+
 ## [1.0.88] — 2026-10-22
 
 ### Changed
