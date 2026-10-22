@@ -24,6 +24,7 @@ from backend.services.audio_service import audio_service, speech_seconds
 from backend.services.event_bus import bus
 from backend.services.hotkey_service import hotkey_service
 from backend.services.pipeline import pipeline
+from backend.services.rumble_service import rumble_service
 from backend.services.whisper_service import whisper_service
 from backend.utils.encryption import migrate_legacy_keys
 from backend.utils.logger import get_logger, setup_logging
@@ -72,6 +73,12 @@ async def lifespan(app: FastAPI):
     # stream die) so dictations never pay a cold open — see start_keepalive.
     audio_service.start_keepalive()
 
+    # One short controller buzz when recording actually starts (optional, no-op
+    # without a wired Xbox controller). The worker thread is started here; the
+    # audio callback only enqueues via rumble_service.request.
+    rumble_service.start()
+    audio_service.on_capture_started = rumble_service.request
+
     # Background warm-up + history retention (non-blocking).
     threading.Thread(target=_warm_whisper, daemon=True).start()
     threading.Thread(target=_warm_vad, daemon=True).start()
@@ -82,6 +89,14 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    try:
+        rumble_service.stop_all()   # never leave a motor buzzing
+    except Exception:
+        pass
+    try:
+        rumble_service.stop()
+    except Exception:
+        pass
     hotkey_service.stop()
     log.info("WhisperText backend stopped")
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 import threading
 import time
 from collections import deque
+from typing import Callable
 
 import numpy as np
 import sounddevice as sd
@@ -151,6 +152,11 @@ class AudioService:
         self._chunks: list[np.ndarray] = []
         self._lock = threading.Lock()
         self._recording = False
+        # Fired once per recording, on the audio thread, when the FIRST real block
+        # after recording begins arrives (not on key-down or prewarm). Used for the
+        # controller buzz; wired in app.py so tests can inject a fake.
+        self.on_capture_started: Callable[[], None] | None = None
+        self._first_block_pending = False
         self._started_at = 0.0
         self._last_speech_s = 0.0
         self._overflows = 0
@@ -288,6 +294,16 @@ class AudioService:
             if getattr(status, "input_overflow", False):
                 self._overflows += 1
             log.debug("Audio status: %s", status)
+        # First real block of this recording: signal "capture actually started"
+        # (not key-down / prewarm). No lock here — start()/stop() hold it.
+        if self._first_block_pending:
+            self._first_block_pending = False
+            cb = self.on_capture_started
+            if cb is not None:
+                try:
+                    cb()
+                except Exception:
+                    pass
         self._chunks.append(indata.copy())
         sink = self._chunk_sink
         if sink is not None:          # live streaming (Deepgram) — cheap enqueue
@@ -384,6 +400,7 @@ class AudioService:
             preroll_blocks = len(self._chunks)
             self._overflows = 0
             self._started_at = time.monotonic()
+            self._first_block_pending = True   # fire on_capture_started on the next real block
             self._recording = True
         log.info("Recording started (device=%s, capture=%d Hz -> %d Hz, pre-roll %d blocks)",
                  s.input_device, self._capture_rate, s.sample_rate, preroll_blocks)
@@ -527,6 +544,7 @@ class AudioService:
         mid-recording, so the dictation is cut off — flagged and logged."""
         with self._lock:
             self._recording = False
+            self._first_block_pending = False
             held = time.monotonic() - self._started_at
             overflows = self._overflows
             pcm = (np.concatenate(self._chunks).flatten() if self._chunks

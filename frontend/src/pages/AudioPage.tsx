@@ -99,6 +99,13 @@ export default function AudioPage() {
           checked={a.keep_mic_warm} onChange={(v) => patch({ audio: { keep_mic_warm: v } })} />
       </Section>
 
+      <Section title="Xbox controller">
+        <Toggle label="Vibrate controller when recording starts"
+          description="A wired Xbox controller gives one short buzz the moment WhisperText starts listening. No setup needed; does nothing if no controller is plugged in."
+          checked={a.vibrate_controller_on_record !== false}
+          onChange={(v) => patch({ audio: { vibrate_controller_on_record: v } })} />
+      </Section>
+
       <Section title="Format">
         <Select
           label="Sample rate"

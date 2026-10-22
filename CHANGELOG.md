@@ -3,6 +3,18 @@
 All notable changes to WhisperText are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · versioning: SemVer.
 
+## [1.0.87] — 2026-10-21
+
+### Added
+- **Xbox controller buzz when recording starts.** If a wired Xbox controller is
+  plugged in, it gives one short buzz the exact moment WhisperText begins
+  listening — a hands-free "it's recording now" cue. It fires on the first bit of
+  audio actually captured, not on the key press. The tray **Start Dictation** and
+  the Audio page's **Test microphone** start the same recording, so they buzz too.
+  Toggle it under **Audio → Xbox controller** (on by default). It does nothing
+  if no controller is connected, and there's no buzz over Remote Desktop (the
+  controller isn't present in the remote session).
+
 ## [1.0.86] — 2026-10-15
 
 ### Added

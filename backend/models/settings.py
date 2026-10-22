@@ -58,6 +58,10 @@ class AudioSettings(BaseModel):
     # call-audio (HFP) mode. Turn off to open the mic on demand instead — cheaper,
     # but the first word or two can be clipped by the cold-open latency (0.2-1.3s).
     keep_mic_warm: bool = True
+    # One short buzz on a wired Xbox controller the moment recording starts (a
+    # hands-free "listening now" cue). No-op without a controller. Default on; a
+    # missing key stays on, so older settings files/backups are unaffected.
+    vibrate_controller_on_record: bool = True
 
 
 class WhisperSettings(BaseModel):
